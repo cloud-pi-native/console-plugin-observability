@@ -1,0 +1,29 @@
+{
+  "extends": [
+    "@cpn-console/ts-config/tsconfig.base.json"
+  ],
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationDir": "./types",
+    "sourceMap": false,
+    "lib": [
+      "ESNext"
+    ],
+  },
+  "include": [
+    "./src/**/*.ts"
+  ],
+  "exclude": [
+    "./node_modules",
+    "./dist",
+    "./types"
+  ],
+  "plugins": [
+    {
+      "transform": "typescript-transform-paths"
+    }
+  ],
+}

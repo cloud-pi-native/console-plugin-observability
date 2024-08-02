@@ -1,0 +1,52 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.11.0"
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Get package version
+        id: pkg-version
+        run: echo "version=$(jq -r '.version' package.json)" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.pkg-version.outputs.version }}
+          release_name: Release v${{ steps.pkg-version.outputs.version }}
+          body: New version v${{ steps.pkg-version.outputs.version }}
+
+      - name: Install production dependencies
+        run: rm -rf ./node_modules && npm install --ignore-scripts --omit=dev
+
+      - name: Zip build folder
+        run: zip -r ./package.zip ./package.json ./dist ./node_modules
+
+      - name: Upload release artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./package.zip
+          asset_name: build-artifact.zip
+          asset_content_type: application/gzip

@@ -1,0 +1,10 @@
+{
+  "root": true,
+  "extends": [
+    "@cpn-console/eslint-config"
+  ],
+  "ignorePatterns": [
+    "**/*.json"
+  ],
+  "parser": "@typescript-eslint/parser"
+}
