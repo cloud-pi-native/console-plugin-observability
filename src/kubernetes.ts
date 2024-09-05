@@ -114,21 +114,13 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
   spec: {
     datasource: {
       access: 'proxy',
-      basicAuth: true,
-      // eslint-disable-next-line no-template-curly-in-string
-      basicAuthUser: '${PROMETHEUS_USERNAME}',
       isDefault: true,
       jsonData: {
-        httpHeaderName1: 'X-Scope-OrgID',
+        oauthPassThru: true,
+        tlsSkipVerify: true,
       },
       name: 'Prometheus',
-      secureJsonData: {
-        // eslint-disable-next-line no-template-curly-in-string
-        basicAuthPassword: '${PROMETHEUS_PASSWORD}',
-        httpHeaderValue1: parentGrafanaName,
-      },
       type: 'prometheus',
-      uid: 'prometheus',
       url: `${getConfig().mimirUrl}/prometheus`,
     },
     instanceSelector: {
@@ -136,26 +128,7 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
         app: parentGrafanaName,
       },
     },
-    valuesFrom: [
-      {
-        targetPath: 'basicAuthUser',
-        valueFrom: {
-          secretKeyRef: {
-            key: 'PROMETHEUS_USERNAME',
-            name: 'credentials',
-          },
-        },
-      },
-      {
-        targetPath: 'secureJsonData.basicAuthPassword',
-        valueFrom: {
-          secretKeyRef: {
-            key: 'PROMETHEUS_PASSWORD',
-            name: 'credentials',
-          },
-        },
-      },
-    ],
+    resyncPeriod: '5m',
   },
 })
 
@@ -188,48 +161,21 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
   spec: {
     datasource: {
       access: 'proxy',
-      basicAuth: true,
-      // eslint-disable-next-line no-template-curly-in-string
-      basicAuthUser: '${PROMETHEUS_USERNAME}',
-      isDefault: false,
+      isDefault: true,
       jsonData: {
-        httpHeaderName1: 'X-Scope-OrgID',
+        oauthPassThru: true,
+        tlsSkipVerify: true,
       },
       name: 'Alertmanager',
-      secureJsonData: {
-        // eslint-disable-next-line no-template-curly-in-string
-        basicAuthPassword: '${PROMETHEUS_PASSWORD}',
-        httpHeaderValue1: parentGrafanaName, // TODO voir avec Ronan
-      },
       type: 'alertmanager',
-      uid: 'alertmanager',
-      url: getConfig().mimirUrl,
+      url: `${getConfig().mimirUrl}`,
     },
     instanceSelector: {
       matchLabels: {
         app: parentGrafanaName,
       },
     },
-    valuesFrom: [
-      {
-        targetPath: 'basicAuthUser',
-        valueFrom: {
-          secretKeyRef: {
-            key: 'PROMETHEUS_USERNAME',
-            name: 'credentials',
-          },
-        },
-      },
-      {
-        targetPath: 'secureJsonData.basicAuthPassword',
-        valueFrom: {
-          secretKeyRef: {
-            key: 'PROMETHEUS_PASSWORD',
-            name: 'credentials',
-          },
-        },
-      },
-    ],
+    resyncPeriod: '5m',
   },
 })
 
@@ -255,6 +201,51 @@ const getGrafanaAlertManagerDataSourceObject = (
     ...getGrafanaAlertManagerSpec(parentGrafanaName),
   }
 }
+
+const getGrafanaLokiSpec = (parentGrafanaName: string) => ({
+  spec: {
+    datasource: {
+      access: 'proxy',
+      isDefault: true,
+      jsonData: {
+        oauthPassThru: true,
+        tlsSkipVerify: true,
+      },
+      name: 'loki',
+      type: 'loki',
+      url: getConfig().lokiUrl,
+    },
+    instanceSelector: {
+      matchLabels: {
+        app: parentGrafanaName,
+      },
+    },
+    resyncPeriod: '5m',
+  },
+})
+
+const getGrafanaLokiDataSourceObject = (
+  params: BaseParams,
+  datasourceName: string,
+) => {
+  const parentGrafanaName = computeGrafanaName(params)
+  return {
+    apiVersion: 'grafana.integreatly.org/v1beta1',
+    kind: 'GrafanaDatasource',
+    metadata: {
+      name: datasourceName,
+      namespace: getConfig().grafanaNamespace,
+      labels: {
+        'app.kubernetes.io/managed-by': 'dso-console',
+        'dso/organization': params.organizationName,
+        'dso/project': params.projectName,
+        'dso/grafana-stage': params.stage,
+        'dso/grafana-source': 'alert-manager',
+      },
+    },
+    ...getGrafanaLokiSpec(parentGrafanaName),
+  }
+}
 // #endregion
 
 // #region DataSources manipulation
@@ -266,6 +257,10 @@ const datasourcesFn = {
   'alert-manager': {
     specFn: getGrafanaAlertManagerSpec,
     objectFn: getGrafanaAlertManagerDataSourceObject,
+  },
+  loki: {
+    specFn: getGrafanaLokiSpec,
+    objectFn: getGrafanaLokiDataSourceObject,
   },
 }
 

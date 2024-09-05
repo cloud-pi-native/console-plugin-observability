@@ -1,11 +1,12 @@
 import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
-import { CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
+import { Config, CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
 
 const config: {
   grafanaHost?: string
   grafanaUrl?: string
   grafanaNamespace?: string
   mimirUrl?: string
+  lokiUrl?: string
   kubeconfigPath?: string
   kubeconfigCtx?: string
   keycloakUrl?: string
@@ -24,6 +25,7 @@ const config: {
   grafanaUrl: undefined,
   grafanaNamespace: undefined,
   mimirUrl: undefined,
+  lokiUrl: undefined,
   kubeconfigPath: undefined,
   kubeconfigCtx: undefined,
   keycloakUrl: undefined,
@@ -44,6 +46,7 @@ export const getConfig = (): Required<typeof config> => {
   config.grafanaUrl = config.grafanaUrl ?? removeTrailingSlash(requiredEnv('GRAFANA_URL'))
   config.grafanaNamespace = config.grafanaNamespace ?? requiredEnv('GRAFANA_NAMESPACE')
   config.mimirUrl = config.mimirUrl ?? removeTrailingSlash(requiredEnv('MIMIR_URL'))
+  config.lokiUrl = config.lokiUrl ?? removeTrailingSlash(requiredEnv('LOKI_URL'))
   config.kubeconfigPath = config.kubeconfigPath ?? process.env.KUBECONFIG_PATH
   config.kubeconfigCtx = config.kubeconfigCtx ?? process.env.KUBECONFIG_CTX
   config.keycloakUrl = removeTrailingSlash(requiredEnv('KEYCLOAK_URL'))
