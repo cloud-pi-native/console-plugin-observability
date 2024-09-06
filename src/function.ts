@@ -289,6 +289,7 @@ export const deleteProject: StepCall<Project> = async (payload) => {
 export const upsertGrafanaConfig = (params: BaseParams, keycloakApi: KeycloakProjectApi) => [
   ensureDataSource(params, 'alert-manager'),
   ensureDataSource(params, 'prometheus'),
+  ensureDataSource(params, 'loki'),
   ensureGrafanaInstance(params, keycloakApi),
 ]
 
