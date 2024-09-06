@@ -1,5 +1,5 @@
 import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
-import { Config, CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
+import { CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
 
 const config: {
   grafanaHost?: string
