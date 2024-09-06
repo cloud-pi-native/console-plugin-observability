@@ -4,7 +4,7 @@ import { PatchUtils } from '@kubernetes/client-node'
 
 const patchOptions = { headers: { 'Content-type': PatchUtils.PATCH_FORMAT_JSON_MERGE_PATCH } }
 
-const computeGrafanaName = (params: BaseParams) => `${params.organizationName}-${params.projectName}`
+const computeGrafanaName = (params: BaseParams) => params.stage === 'prod' ? `${params.projectName}` : `hprod-${params.projectName}`
 const getProjectSelector = (p: BaseParams) => [`dso/grafana-stage=${p.stage}`, `dso/organization=${p.organizationName}`, `dso/project=${p.projectName}`, 'app.kubernetes.io/managed-by=dso-console']
 
 // #region GrafanaInstance

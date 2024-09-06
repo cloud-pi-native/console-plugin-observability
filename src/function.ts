@@ -23,27 +23,44 @@ const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 const getBaseParams = (project: Project, stage: Stage): BaseParams => ({ organizationName: project.organization.name, projectName: project.name, stage })
 
-export type ListPerms = Record<'tenant', Record<'view' | 'edit', UserObject['id'][]>>
+export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
 
 const getListPrems = (environments: Environment[]): ListPerms => {
-  const allTenantPerms = environments
+  const allProdPerms = environments
+    .filter(env => env.stage === 'prod')
     .map(env => env.permissions)
     .flat()
+  const allHProdPerms = environments
+    .filter(env => env.stage !== 'prod')
+    .map(env => env.permissions)
+    .flat()
+
   const listPerms: ListPerms = {
-    tenant: {
+    'hors-prod': {
+      edit: [],
+      view: [],
+    },
+    prod: {
       edit: [],
       view: [],
     },
   }
-  for (const permission of allTenantPerms) {
-    if (permission.permissions.rw && !listPerms.tenant.edit.includes(permission.userId)) {
-      listPerms.tenant.edit.push(permission.userId)
+  for (const permission of allProdPerms) {
+    if (permission.permissions.rw && !listPerms.prod.edit.includes(permission.userId)) {
+      listPerms.prod.edit.push(permission.userId)
     }
-    if (permission.permissions.ro && !listPerms.tenant.view.includes(permission.userId)) {
-      listPerms.tenant.view.push(permission.userId)
+    if (permission.permissions.ro && !listPerms.prod.view.includes(permission.userId)) {
+      listPerms.prod.view.push(permission.userId)
     }
   }
-
+  for (const permission of allHProdPerms) {
+    if (permission.permissions.rw && !listPerms['hors-prod'].edit.includes(permission.userId)) {
+      listPerms['hors-prod'].edit.push(permission.userId)
+    }
+    if (permission.permissions.ro && !listPerms['hors-prod'].view.includes(permission.userId)) {
+      listPerms['hors-prod'].view.push(permission.userId)
+    }
+  }
   return listPerms
 }
 
@@ -166,12 +183,17 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     // init args
     const project = payload.args
     const keycloakApi = payload.apis.keycloak
-    const hasTenant = project.environments.length > 0
-    const tenantParam = getBaseParams(project, 'tenant')
+    const hasProd = project.environments.find(env => env.stage === 'prod')
+    const hasNonProd = project.environments.find(env => env.stage !== 'prod')
+
+    const hProdParams = getBaseParams(project, 'hprod')
+    const prodParams = getBaseParams(project, 'prod')
+
     const listPerms = getListPrems(project.environments)
     await Promise.all([
       ensureKeycloakGroups(listPerms, keycloakApi),
-      ...(hasTenant ? upsertGrafanaConfig(tenantParam, keycloakApi) : []),
+      ...(hasProd ? upsertGrafanaConfig(prodParams, keycloakApi) : deleteGrafanaConfig(prodParams)),
+      ...(hasNonProd ? upsertGrafanaConfig(hProdParams, keycloakApi) : deleteGrafanaConfig(hProdParams)),
     ])
     // init gitlab api
     const api = getApi()

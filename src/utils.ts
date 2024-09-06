@@ -93,7 +93,7 @@ export const getCustomK8sApi = (): CustomObjectsApi => {
   return customK8sApi
 }
 
-export type Stage = 'tenant'
+export type Stage = 'prod' | 'hprod'
 
 export type BaseParams = {
   organizationName: string

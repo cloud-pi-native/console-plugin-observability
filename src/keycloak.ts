@@ -3,8 +3,8 @@ import type GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/g
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import { getConfig } from './utils.js'
 import { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
-import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
 import { ListPerms } from './function.js'
+import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
 
 export const getkcClient = async () => {
   const kcClient = new KcAdminClient({
@@ -37,22 +37,40 @@ export const ensureKeycloakGroups = async (listPerms: ListPerms, keycloakApi: Ke
   const subgroupsMetrics = await findOrCreateMetricGroupAndSubGroups(rootGroup.id)
   const promises: Promise<any>[] = []
 
-  listPerms.tenant.edit.forEach(userId => {
-    if (subgroupsMetrics.RW.members.find(member => member.id === userId)) return
-    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics.RW.id, id: userId }))
+  // à ajouter
+  listPerms['hors-prod'].edit.forEach(userId => {
+    if (subgroupsMetrics['hprod-RW'].members.find(member => member.id === userId)) return
+    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['hprod-RW'].id, id: userId }))
   })
-  listPerms.tenant.view.forEach(userId => {
-    if (subgroupsMetrics.RO.members.find(member => member.id === userId)) return
-    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics.RO.id, id: userId }))
+  listPerms['hors-prod'].view.forEach(userId => {
+    if (subgroupsMetrics['hprod-RO'].members.find(member => member.id === userId)) return
+    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['hprod-RO'].id, id: userId }))
   })
+  listPerms.prod.edit.forEach(userId => {
+    if (subgroupsMetrics['prod-RW'].members.find(member => member.id === userId)) return
+    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['prod-RW'].id, id: userId }))
+  })
+  listPerms.prod.view.forEach(userId => {
+    if (subgroupsMetrics['prod-RO'].members.find(member => member.id === userId)) return
+    promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['prod-RO'].id, id: userId }))
+  })
+
   // à retirer
-  subgroupsMetrics.RW.members.forEach(member => {
-    if (listPerms.tenant.edit.includes(member.id)) return
-    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics.RW.id }))
+  subgroupsMetrics['hprod-RW'].members.forEach(member => {
+    if (listPerms['hors-prod'].edit.includes(member.id)) return
+    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['hprod-RW'].id }))
   })
-  subgroupsMetrics.RO.members.forEach(member => {
-    if (listPerms.tenant.view.includes(member.id)) return
-    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics.RO.id }))
+  subgroupsMetrics['hprod-RO'].members.forEach(member => {
+    if (listPerms['hors-prod'].view.includes(member.id)) return
+    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['hprod-RO'].id }))
+  })
+  subgroupsMetrics['prod-RW'].members.forEach(member => {
+    if (listPerms.prod.edit.includes(member.id)) return
+    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['prod-RW'].id }))
+  })
+  subgroupsMetrics['prod-RO'].members.forEach(member => {
+    if (listPerms.prod.view.includes(member.id)) return
+    promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['prod-RO'].id }))
   })
 
   return Promise.all(promises)
@@ -61,8 +79,10 @@ export const ensureKeycloakGroups = async (listPerms: ListPerms, keycloakApi: Ke
 type GroupDetails = Required<GroupRepresentation> & { members: Required<UserRepresentation>[] }
 
 type SubgroupsMetrics = {
-  'RW': GroupDetails
-  'RO': GroupDetails
+  'hprod-RW': GroupDetails
+  'hprod-RO': GroupDetails
+  'prod-RW': GroupDetails
+  'prod-RO': GroupDetails
 }
 
 const findMetricsGroup = async (kcClient: KeycloakAdminClient, parentId: string) => {
@@ -76,20 +96,30 @@ const findOrCreateMetricGroupAndSubGroups = async (parentId: string): Promise<Su
   if (!testMetricsGroup) {
     const metricsGroup = await kcClient.groups.createChildGroup({ id: parentId }, { name: 'grafana' })
     return {
-      RW: await createKeycloakGrafanaSubGroup('RW', metricsGroup.id, kcClient),
-      RO: await createKeycloakGrafanaSubGroup('RO', metricsGroup.id, kcClient),
+      'hprod-RW': await createKeycloakGrafanaSubGroup('hprod-RW', metricsGroup.id, kcClient),
+      'hprod-RO': await createKeycloakGrafanaSubGroup('hprod-RO', metricsGroup.id, kcClient),
+      'prod-RW': await createKeycloakGrafanaSubGroup('prod-RW', metricsGroup.id, kcClient),
+      'prod-RO': await createKeycloakGrafanaSubGroup('prod-RO', metricsGroup.id, kcClient),
     }
   }
   const metricsSubGroups = await kcClient.groups.listSubGroups({ parentId: testMetricsGroup.id }) as Required<GroupRepresentation>[]
-  const grafanaTenantEdit = metricsSubGroups.find(g => g.name === 'RW')
-  const grafanaTenantView = metricsSubGroups.find(g => g.name === 'RO')
+  const grafanaHorsProdEdit = metricsSubGroups.find(g => g.name === 'hprod-RW')
+  const grafanaHorsProdView = metricsSubGroups.find(g => g.name === 'hprod-RO')
+  const grafanaProdEdit = metricsSubGroups.find(g => g.name === 'prod-RW')
+  const grafanaProdView = metricsSubGroups.find(g => g.name === 'prod-RO')
   return {
-    RW: grafanaTenantEdit
-      ? await findDetails(grafanaTenantEdit, kcClient)
-      : await createKeycloakGrafanaSubGroup('RW', testMetricsGroup.id, kcClient),
-    RO: grafanaTenantView
-      ? await findDetails(grafanaTenantView, kcClient)
-      : await createKeycloakGrafanaSubGroup('RO', testMetricsGroup.id, kcClient),
+    'hprod-RW': grafanaHorsProdEdit
+      ? await findDetails(grafanaHorsProdEdit, kcClient)
+      : await createKeycloakGrafanaSubGroup('hprod-RW', testMetricsGroup.id, kcClient),
+    'hprod-RO': grafanaHorsProdView
+      ? await findDetails(grafanaHorsProdView, kcClient)
+      : await createKeycloakGrafanaSubGroup('hprod-RO', testMetricsGroup.id, kcClient),
+    'prod-RW': grafanaProdEdit
+      ? await findDetails(grafanaProdEdit, kcClient)
+      : await createKeycloakGrafanaSubGroup('prod-RW', testMetricsGroup.id, kcClient),
+    'prod-RO': grafanaProdView
+      ? await findDetails(grafanaProdView, kcClient)
+      : await createKeycloakGrafanaSubGroup('prod-RO', testMetricsGroup.id, kcClient),
   }
 }
 
