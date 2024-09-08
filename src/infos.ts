@@ -1,12 +1,21 @@
 import { type ServiceInfos } from '@cpn-console/hooks'
-import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
+import { getConfig } from './utils.js'
 
 const infos: ServiceInfos = {
-  name: 'loki',
-  to: ({ project, organization }) => `${removeTrailingSlash(requiredEnv('GRAFANA_URL'))}/${organization}-${project}`,
-  title: 'Loki - Grafana',
-  imgSrc: 'https://static-www.elastic.co/v3/assets/bltefdd0b53724fa2ce/blt4466841eed0bf232/5d082a5e97f2babb5af907ee/logo-kibana-32-color.svg',
-  description: 'Loki - Grafana est un outil de visualisation de logs',
+  name: 'observability',
+  to: ({ project, organization }) => [
+    {
+      to: `https://${getConfig().grafanaHost}/hprod-${organization}-${project}`,
+      title: 'Hors production',
+    },
+    {
+      to: `https:///${getConfig().grafanaHost}/prod-${organization}-${project}`,
+      title: 'Production',
+    },
+  ],
+  title: 'Grafana',
+  imgSrc: 'https://upload.wikimedia.org/wikipedia/commons/a/a1/Grafana_logo.svg',
+  description: 'Grafana est un outil de métrique et de logs',
 }
 
 export default infos
