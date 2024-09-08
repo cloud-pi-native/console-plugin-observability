@@ -1,10 +1,10 @@
 import { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
-import { BaseParams, getConfig, getCustomK8sApi } from './utils.js'
+import { BaseParams, getConfig, getCustomK8sApi, Stage } from './utils.js'
 import { PatchUtils } from '@kubernetes/client-node'
 
 const patchOptions = { headers: { 'Content-type': PatchUtils.PATCH_FORMAT_JSON_MERGE_PATCH } }
 
-const computeGrafanaName = (params: BaseParams) => params.stage === 'prod' ? `${params.projectName}` : `hprod-${params.projectName}`
+const computeGrafanaName = (params: BaseParams) => params.stage === 'prod' ? `${params.organizationName}-${params.projectName}` : `hprod-${params.organizationName}-${params.projectName}`
 const getProjectSelector = (p: BaseParams) => [`dso/grafana-stage=${p.stage}`, `dso/organization=${p.organizationName}`, `dso/project=${p.projectName}`, 'app.kubernetes.io/managed-by=dso-console']
 
 // #region GrafanaInstance
@@ -240,7 +240,7 @@ const getGrafanaLokiDataSourceObject = (
         'dso/organization': params.organizationName,
         'dso/project': params.projectName,
         'dso/grafana-stage': params.stage,
-        'dso/grafana-source': 'alert-manager',
+        'dso/grafana-source': 'loki',
       },
     },
     ...getGrafanaLokiSpec(parentGrafanaName),
@@ -308,12 +308,12 @@ export const deleteAllDataSources = async (params: BaseParams) => {
 // #endregion
 
 // #region Instance manipulation
-const getRoleAttributePath = (keycloakRootGroup: string) => `contains(groups[*], '${keycloakRootGroup}/grafana/RW') && 'Editor' || contains(groups[*], '${keycloakRootGroup}/grafana/RO') && 'Viewer'`
+export const getRoleAttributePath = (keycloakRootGroup: string, stage: Stage) => `contains(groups[*], '${keycloakRootGroup}/grafana/${stage}-RW') && 'Editor' || contains(groups[*], '${keycloakRootGroup}/grafana/${stage}-RO') && 'Viewer'`
 
 export const ensureGrafanaInstance = async (params: BaseParams, keycloakApi: KeycloakProjectApi) => {
   const customObjectsApi = getCustomK8sApi()
   const keycloakRootGroupPath = await keycloakApi.getProjectGroupPath()
-  const roleAttributePath = getRoleAttributePath(keycloakRootGroupPath)
+  const roleAttributePath = getRoleAttributePath(keycloakRootGroupPath, params.stage)
   const selectors = getProjectSelector(params).join(',')
   const { body: { items } } = await customObjectsApi.listNamespacedCustomObject('grafana.integreatly.org', 'v1beta1', getConfig().grafanaNamespace, 'grafanas', undefined, undefined, undefined, undefined, selectors) as { body: {items: { metadata: { name: string } }[] } }
   const grafanaName = computeGrafanaName(params)
