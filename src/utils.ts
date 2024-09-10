@@ -2,6 +2,7 @@ import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
 import { CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
 
 const config: {
+  observatoriumUrl?: string
   grafanaHost?: string
   grafanaUrl?: string
   grafanaNamespace?: string
@@ -21,6 +22,7 @@ const config: {
   HTTPS_PROXY?: string
   NO_PROXY?: string
 } = {
+  observatoriumUrl: undefined,
   grafanaHost: undefined,
   grafanaUrl: undefined,
   grafanaNamespace: undefined,
@@ -60,7 +62,7 @@ export const getConfig = (): Required<typeof config> => {
   config.HTTP_PROXY = config.HTTP_PROXY ?? process.env.HTTP_PROXY
   config.HTTPS_PROXY = config.HTTPS_PROXY ?? process.env.HTTPS_PROXY
   config.NO_PROXY = config.NO_PROXY ?? process.env.NO_PROXY
-
+  config.observatoriumUrl = config.observatoriumUrl ?? removeTrailingSlash(requiredEnv('OBSERVATORIUM_URL'))
   // @ts-ignore
   return config
 }

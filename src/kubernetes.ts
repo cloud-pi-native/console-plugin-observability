@@ -4,7 +4,7 @@ import { PatchUtils } from '@kubernetes/client-node'
 
 const patchOptions = { headers: { 'Content-type': PatchUtils.PATCH_FORMAT_JSON_MERGE_PATCH } }
 
-const computeGrafanaName = (params: BaseParams) => params.stage === 'prod' ? `${params.organizationName}-${params.projectName}` : `hprod-${params.organizationName}-${params.projectName}`
+const computeGrafanaName = (params: BaseParams) => params.stage === 'prod' ? `prod-${params.organizationName}-${params.projectName}` : `hprod-${params.organizationName}-${params.projectName}`
 const getProjectSelector = (p: BaseParams) => [`dso/grafana-stage=${p.stage}`, `dso/organization=${p.organizationName}`, `dso/project=${p.projectName}`, 'app.kubernetes.io/managed-by=dso-console']
 
 // #region GrafanaInstance
@@ -121,7 +121,7 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
       },
       name: 'Prometheus',
       type: 'prometheus',
-      url: `${getConfig().mimirUrl}/prometheus`,
+      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}/prometheus`,
     },
     instanceSelector: {
       matchLabels: {
@@ -168,7 +168,7 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
       },
       name: 'Alertmanager',
       type: 'alertmanager',
-      url: `${getConfig().mimirUrl}`,
+      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}/alert-manager`,
     },
     instanceSelector: {
       matchLabels: {
@@ -213,7 +213,7 @@ const getGrafanaLokiSpec = (parentGrafanaName: string) => ({
       },
       name: 'loki',
       type: 'loki',
-      url: getConfig().lokiUrl,
+      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}`,
     },
     instanceSelector: {
       matchLabels: {
