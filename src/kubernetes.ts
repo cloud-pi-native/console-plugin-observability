@@ -124,7 +124,7 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
       },
       name: 'Prometheus',
       type: 'prometheus',
-      url: `${generateObservatoriumUrl('logs', parentGrafanaName)}/prometheus`,
+      url: `${generateObservatoriumUrl('metrics', parentGrafanaName)}/prometheus`,
     },
     instanceSelector: {
       matchLabels: {
@@ -171,7 +171,7 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
       },
       name: 'Alertmanager',
       type: 'alertmanager',
-      url: `${generateObservatoriumUrl('metrics', parentGrafanaName)}`,
+      url: generateObservatoriumUrl('metrics', parentGrafanaName),
     },
     instanceSelector: {
       matchLabels: {
@@ -216,7 +216,7 @@ const getGrafanaLokiSpec = (parentGrafanaName: string) => ({
       },
       name: 'loki',
       type: 'loki',
-      url: `${generateObservatoriumUrl('logs', parentGrafanaName)}`,
+      url: generateObservatoriumUrl('logs', parentGrafanaName),
     },
     instanceSelector: {
       matchLabels: {
