@@ -109,6 +109,9 @@ const getGrafanaInstanceObject = (params: BaseParams, roleAttributePath: string)
 }
 // #endregion
 
+const generateObservatoriumUrl = (type: string, parentGrafanaName: string) => {
+  return `${getConfig().observatoriumUrl}/${type}/v1/${parentGrafanaName}`
+}
 // #region Prometheus
 const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
   spec: {
@@ -121,7 +124,7 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
       },
       name: 'Prometheus',
       type: 'prometheus',
-      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}/prometheus`,
+      url: `${generateObservatoriumUrl('logs', parentGrafanaName)}/prometheus`,
     },
     instanceSelector: {
       matchLabels: {
@@ -168,7 +171,7 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
       },
       name: 'Alertmanager',
       type: 'alertmanager',
-      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}/alert-manager`,
+      url: `${generateObservatoriumUrl('metrics', parentGrafanaName)}/alertmanager`,
     },
     instanceSelector: {
       matchLabels: {
@@ -213,7 +216,7 @@ const getGrafanaLokiSpec = (parentGrafanaName: string) => ({
       },
       name: 'loki',
       type: 'loki',
-      url: `${getConfig().observatoriumUrl}/${parentGrafanaName}`,
+      url: `${generateObservatoriumUrl('logs', parentGrafanaName)}`,
     },
     instanceSelector: {
       matchLabels: {
