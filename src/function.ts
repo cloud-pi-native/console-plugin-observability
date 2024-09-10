@@ -77,9 +77,6 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 
     await Promise.all([
       ensureKeycloakGroups(listPerms, keycloakApi),
-      ...(hasProd ? upsertGrafanaConfig(prodParams, keycloakApi) : deleteGrafanaConfig(prodParams)),
-      ...(hasNonProd ? upsertGrafanaConfig(hProdParams, keycloakApi) : deleteGrafanaConfig(hProdParams)),
-
       // Upsert or delete Gitlab config based on prod/non-prod environment
       ...(hasProd
         ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, api)]
@@ -116,8 +113,8 @@ export const deleteProject: StepCall<Project> = async (payload) => {
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      deleteGrafanaConfig(prodParams),
-      deleteGrafanaConfig(hProdParams),
+      // deleteGrafanaConfig(prodParams),
+      // deleteGrafanaConfig(hProdParams),
       deleteGitlabYamlConfig(prodParams, project, api),
       deleteGitlabYamlConfig(hProdParams, project, api),
     ])

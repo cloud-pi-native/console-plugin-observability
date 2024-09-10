@@ -121,6 +121,7 @@ const getGrafanaPrometheusSpec = (parentGrafanaName: string) => ({
       jsonData: {
         oauthPassThru: true,
         tlsSkipVerify: true,
+        prometheusType: 'Mimir',
       },
       name: 'Prometheus',
       type: 'prometheus',
@@ -168,6 +169,7 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
       jsonData: {
         oauthPassThru: true,
         tlsSkipVerify: true,
+        implementation: 'mimir',
       },
       name: 'Alertmanager',
       type: 'alertmanager',
