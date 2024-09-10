@@ -171,7 +171,7 @@ const getGrafanaAlertManagerSpec = (parentGrafanaName: string) => ({
       },
       name: 'Alertmanager',
       type: 'alertmanager',
-      url: `${generateObservatoriumUrl('metrics', parentGrafanaName)}/alertmanager`,
+      url: `${generateObservatoriumUrl('metrics', parentGrafanaName)}`,
     },
     instanceSelector: {
       matchLabels: {
