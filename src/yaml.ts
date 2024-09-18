@@ -108,8 +108,8 @@ const findOrCreateValuesFile = async (
 
 export const upsertGitlabConfig = async (params: BaseParams, keycloakRootGroupPath: string, project: Project, api: IGitlab) => {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
-  const lokiGroupName = 'loki-group'
-  const lokiRepoName = 'loki-repo'
+  const lokiGroupName = 'observability'
+  const lokiRepoName = 'observability'
   const gitlabLokiGroup = await findOrCreateGroup(api, lokiGroupName)
   const gitlabLokiRepo = await findOrCreateRepo(api, gitlabLokiGroup, lokiRepoName)
 
