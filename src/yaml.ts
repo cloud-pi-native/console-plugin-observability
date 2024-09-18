@@ -64,7 +64,7 @@ const findOrCreateRepo = async (
   try {
     const repo = await findProject(api, group, repoName)
     if (!repo) {
-      return await createProject(api, group, repoName, 'tibolebg');
+      return await createProject(api, group, repoName, 'Repo for obervatorium values, managed by DSO console');
     }
     return repo
   } catch (error: any) {
