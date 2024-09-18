@@ -146,8 +146,8 @@ export const upsertGitlabConfig = async (params: BaseParams, keycloakRootGroupPa
 
 export const deleteGitlabYamlConfig = async (params: BaseParams, project: Project, api: IGitlab) => {
   // Même logique de groupe et de repo que pour l'upsert
-  const lokiGroupName = 'loki-group'
-  const lokiRepoName = 'loki-repo'
+  const lokiGroupName = 'observability'
+  const lokiRepoName = 'observability'
   const gitlabLokiGroup = await findOrCreateGroup(api, lokiGroupName)
   const gitlabLokiRepo = await findOrCreateRepo(api, gitlabLokiGroup, lokiRepoName)
 
