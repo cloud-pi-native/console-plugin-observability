@@ -1,7 +1,7 @@
-import { type Plugin } from '@cpn-console/hooks'
-import infos from './infos.js'
-import { deleteProject, upsertProject } from './function.js'
+import type { Plugin } from '@cpn-console/hooks'
 import { requiredEnv } from '@cpn-console/shared'
+import { deleteProject, upsertProject } from './function.js'
+import infos from './infos.js'
 
 export const plugin: Plugin = {
   infos,
