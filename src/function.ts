@@ -1,5 +1,5 @@
 import type { Environment, Project, StepCall, UserObject } from '@cpn-console/hooks'
-import type { Gitlab as IGitlab } from '@gitbeaker/core'
+import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
 import type { BaseParams, Stage } from './utils.js'
 import { parseError } from '@cpn-console/hooks'
 import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
@@ -50,7 +50,7 @@ function getListPrems(environments: Environment[]): ListPerms {
   return listPerms
 }
 
-function getApi(): IGitlab {
+function getGitlabApi(): GitlabInterface {
   const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_URL'))
   const gitlabToken = requiredEnv('GITLAB_TOKEN')
   return new Gitlab({ token: gitlabToken, host: gitlabUrl })
@@ -61,8 +61,9 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     // init args
     const project = payload.args
     const keycloakApi = payload.apis.keycloak
+    const vaultApi = payload.apis.vault
     // init gitlab api
-    const gitlabApi = getApi()
+    const gitlabApi = getGitlabApi()
     const keycloakRootGroupPath = await keycloakApi.getProjectGroupPath()
 
     const hasProd = project.environments.find(env => env.stage === 'prod')
@@ -75,10 +76,10 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       ensureKeycloakGroups(listPerms, keycloakApi),
       // Upsert or delete Gitlab config based on prod/non-prod environment
       ...(hasProd
-        ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, gitlabApi)]
+        ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
         : [await deleteGitlabYamlConfig(prodParams, project, gitlabApi)]),
       ...(hasNonProd
-        ? [await upsertGitlabConfig(hProdParams, keycloakRootGroupPath, project, gitlabApi)]
+        ? [await upsertGitlabConfig(hProdParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
         : [await deleteGitlabYamlConfig(hProdParams, project, gitlabApi)]),
     ])
 
@@ -102,15 +103,15 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 export const deleteProject: StepCall<Project> = async (payload) => {
   try {
     const project = payload.args
-    const api = getApi()
+    const gitlabApi = getGitlabApi()
     const keycloakApi = payload.apis.keycloak
     const hProdParams = getBaseParams(project, 'hprod')
     const prodParams = getBaseParams(project, 'prod')
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      deleteGitlabYamlConfig(prodParams, project, api),
-      deleteGitlabYamlConfig(hProdParams, project, api),
+      deleteGitlabYamlConfig(prodParams, project, gitlabApi),
+      deleteGitlabYamlConfig(hProdParams, project, gitlabApi),
     ])
 
     return {
