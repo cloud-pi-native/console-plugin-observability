@@ -1,7 +1,7 @@
 {
   "name": "@cpn-console/loki-plugin",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Loki plugin for DSO console",
   "exports": {
     ".": {
