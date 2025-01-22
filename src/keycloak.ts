@@ -1,12 +1,12 @@
+import type { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
 import type KeycloakAdminClient from '@keycloak/keycloak-admin-client'
 import type GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupRepresentation.js'
+import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
+import type { ListPerms } from './function.js'
 import KcAdminClient from '@keycloak/keycloak-admin-client'
 import { getConfig } from './utils.js'
-import { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
-import { ListPerms } from './function.js'
-import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation.js'
 
-export const getkcClient = async () => {
+export async function getkcClient() {
   const kcClient = new KcAdminClient({
     baseUrl: `${getConfig().keycloakProtocol}://${getConfig().keycloakDomain}`,
   })
@@ -21,14 +21,14 @@ export const getkcClient = async () => {
   return kcClient
 }
 
-const getRootGroupProject = async (keycloakApi: KeycloakProjectApi): Promise<Required<GroupRepresentation> | undefined> => {
+async function getRootGroupProject(keycloakApi: KeycloakProjectApi): Promise<Required<GroupRepresentation> | undefined> {
   const kcClient = await getkcClient()
   const rootGroupPath = await keycloakApi.getProjectGroupPath()
   const groups = await kcClient.groups.find({ search: rootGroupPath.slice(1), exact: true })
   return groups.find(g => g.path === rootGroupPath) as Required<GroupRepresentation> | undefined
 }
 
-export const ensureKeycloakGroups = async (listPerms: ListPerms, keycloakApi: KeycloakProjectApi) => {
+export async function ensureKeycloakGroups(listPerms: ListPerms, keycloakApi: KeycloakProjectApi) {
   const kcClient = await getkcClient()
   const rootGroup = await getRootGroupProject(keycloakApi)
   const rootGroupPath = await keycloakApi.getProjectGroupPath()
@@ -38,37 +38,37 @@ export const ensureKeycloakGroups = async (listPerms: ListPerms, keycloakApi: Ke
   const promises: Promise<any>[] = []
 
   // à ajouter
-  listPerms['hors-prod'].edit.forEach(userId => {
+  listPerms['hors-prod'].edit.forEach((userId) => {
     if (subgroupsMetrics['hprod-RW'].members.find(member => member.id === userId)) return
     promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['hprod-RW'].id, id: userId }))
   })
-  listPerms['hors-prod'].view.forEach(userId => {
+  listPerms['hors-prod'].view.forEach((userId) => {
     if (subgroupsMetrics['hprod-RO'].members.find(member => member.id === userId)) return
     promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['hprod-RO'].id, id: userId }))
   })
-  listPerms.prod.edit.forEach(userId => {
+  listPerms.prod.edit.forEach((userId) => {
     if (subgroupsMetrics['prod-RW'].members.find(member => member.id === userId)) return
     promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['prod-RW'].id, id: userId }))
   })
-  listPerms.prod.view.forEach(userId => {
+  listPerms.prod.view.forEach((userId) => {
     if (subgroupsMetrics['prod-RO'].members.find(member => member.id === userId)) return
     promises.push(kcClient.users.addToGroup({ groupId: subgroupsMetrics['prod-RO'].id, id: userId }))
   })
 
   // à retirer
-  subgroupsMetrics['hprod-RW'].members.forEach(member => {
+  subgroupsMetrics['hprod-RW'].members.forEach((member) => {
     if (listPerms['hors-prod'].edit.includes(member.id)) return
     promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['hprod-RW'].id }))
   })
-  subgroupsMetrics['hprod-RO'].members.forEach(member => {
+  subgroupsMetrics['hprod-RO'].members.forEach((member) => {
     if (listPerms['hors-prod'].view.includes(member.id)) return
     promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['hprod-RO'].id }))
   })
-  subgroupsMetrics['prod-RW'].members.forEach(member => {
+  subgroupsMetrics['prod-RW'].members.forEach((member) => {
     if (listPerms.prod.edit.includes(member.id)) return
     promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['prod-RW'].id }))
   })
-  subgroupsMetrics['prod-RO'].members.forEach(member => {
+  subgroupsMetrics['prod-RO'].members.forEach((member) => {
     if (listPerms.prod.view.includes(member.id)) return
     promises.push(kcClient.users.delFromGroup({ id: member.id, groupId: subgroupsMetrics['prod-RO'].id }))
   })
@@ -78,19 +78,19 @@ export const ensureKeycloakGroups = async (listPerms: ListPerms, keycloakApi: Ke
 
 type GroupDetails = Required<GroupRepresentation> & { members: Required<UserRepresentation>[] }
 
-type SubgroupsMetrics = {
+interface SubgroupsMetrics {
   'hprod-RW': GroupDetails
   'hprod-RO': GroupDetails
   'prod-RW': GroupDetails
   'prod-RO': GroupDetails
 }
 
-const findMetricsGroup = async (kcClient: KeycloakAdminClient, parentId: string) => {
+async function findMetricsGroup(kcClient: KeycloakAdminClient, parentId: string) {
   const groups = await kcClient.groups.listSubGroups({ parentId })
   return groups.find(g => g.name === 'grafana') as Required<GroupRepresentation> | undefined
 }
 
-const findOrCreateMetricGroupAndSubGroups = async (parentId: string): Promise<SubgroupsMetrics> => {
+async function findOrCreateMetricGroupAndSubGroups(parentId: string): Promise<SubgroupsMetrics> {
   const kcClient = await getkcClient()
   const testMetricsGroup = await findMetricsGroup(kcClient, parentId)
   if (!testMetricsGroup) {
@@ -123,17 +123,21 @@ const findOrCreateMetricGroupAndSubGroups = async (parentId: string): Promise<Su
   }
 }
 
-const createKeycloakGrafanaSubGroup = async (name: string, parentId: string, kcClient: KeycloakAdminClient): Promise<GroupDetails> => ({
-  ...(await kcClient.groups.createChildGroup({ id: parentId }, { name })) as Required<GroupRepresentation>,
-  members: [],
-})
+async function createKeycloakGrafanaSubGroup(name: string, parentId: string, kcClient: KeycloakAdminClient): Promise<GroupDetails> {
+  return {
+    ...(await kcClient.groups.createChildGroup({ id: parentId }, { name })) as Required<GroupRepresentation>,
+    members: [],
+  }
+}
 
-const findDetails = async (group: Required<GroupRepresentation>, kcClient: KeycloakAdminClient): Promise<GroupDetails> => ({
-  ...group,
-  members: await kcClient.groups.listMembers({ id: group.id }) as Required<UserRepresentation>[],
-})
+async function findDetails(group: Required<GroupRepresentation>, kcClient: KeycloakAdminClient): Promise<GroupDetails> {
+  return {
+    ...group,
+    members: await kcClient.groups.listMembers({ id: group.id }) as Required<UserRepresentation>[],
+  }
+}
 
-export const deleteKeycloakGroup = async (keycloakApi: KeycloakProjectApi) => {
+export async function deleteKeycloakGroup(keycloakApi: KeycloakProjectApi) {
   const kcClient = await getkcClient()
   const projectRootGroup = await getRootGroupProject(keycloakApi)
   if (!projectRootGroup) return

@@ -1,20 +1,17 @@
-import { Environment, parseError, UserObject, type Project, type StepCall } from '@cpn-console/hooks'
-import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
-
-import { Gitlab } from '@gitbeaker/rest'
-import { Gitlab as IGitlab } from '@gitbeaker/core'
-
-import { deleteGitlabYamlConfig, upsertGitlabConfig } from './yaml.js'
+import type { Environment, Project, StepCall, UserObject } from '@cpn-console/hooks'
+import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
 import type { BaseParams, Stage } from './utils.js'
+import { parseError } from '@cpn-console/hooks'
+import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
+import { Gitlab } from '@gitbeaker/rest'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
-import { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
-import { deleteAllDataSources, deleteGrafanaInstance, ensureDataSource, ensureGrafanaInstance } from './kubernetes.js'
+import { deleteGitlabYamlConfig, upsertGitlabConfig } from './yaml.js'
 
 const getBaseParams = (project: Project, stage: Stage): BaseParams => ({ organizationName: project.organization.name, projectName: project.name, stage })
 
 export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
 
-const getListPrems = (environments: Environment[]): ListPerms => {
+function getListPrems(environments: Environment[]): ListPerms {
   const allProdPerms = environments
     .filter(env => env.stage === 'prod')
     .map(env => env.permissions)
@@ -53,11 +50,10 @@ const getListPrems = (environments: Environment[]): ListPerms => {
   return listPerms
 }
 
-const getApi = (): IGitlab => {
+function getGitlabApi(): GitlabInterface {
   const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_URL'))
   const gitlabToken = requiredEnv('GITLAB_TOKEN')
-  // @ts-ignore
-  return new Gitlab({ token: gitlabToken, host: gitlabUrl });
+  return new Gitlab({ token: gitlabToken, host: gitlabUrl })
 }
 
 export const upsertProject: StepCall<Project> = async (payload) => {
@@ -65,8 +61,9 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     // init args
     const project = payload.args
     const keycloakApi = payload.apis.keycloak
+    const vaultApi = payload.apis.vault
     // init gitlab api
-    const api = getApi()
+    const gitlabApi = getGitlabApi()
     const keycloakRootGroupPath = await keycloakApi.getProjectGroupPath()
 
     const hasProd = project.environments.find(env => env.stage === 'prod')
@@ -79,11 +76,11 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       ensureKeycloakGroups(listPerms, keycloakApi),
       // Upsert or delete Gitlab config based on prod/non-prod environment
       ...(hasProd
-        ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, api)]
-        : [await deleteGitlabYamlConfig(prodParams, project, api)]),
+        ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
+        : [await deleteGitlabYamlConfig(prodParams, project, gitlabApi)]),
       ...(hasNonProd
-        ? [await upsertGitlabConfig(hProdParams, keycloakRootGroupPath, project, api)]
-        : [await deleteGitlabYamlConfig(hProdParams, project, api)]),
+        ? [await upsertGitlabConfig(hProdParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
+        : [await deleteGitlabYamlConfig(hProdParams, project, gitlabApi)]),
     ])
 
     return {
@@ -106,17 +103,15 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 export const deleteProject: StepCall<Project> = async (payload) => {
   try {
     const project = payload.args
-    const api = getApi() // API GitLab
+    const gitlabApi = getGitlabApi()
     const keycloakApi = payload.apis.keycloak
     const hProdParams = getBaseParams(project, 'hprod')
     const prodParams = getBaseParams(project, 'prod')
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      // deleteGrafanaConfig(prodParams),
-      // deleteGrafanaConfig(hProdParams),
-      deleteGitlabYamlConfig(prodParams, project, api),
-      deleteGitlabYamlConfig(hProdParams, project, api),
+      deleteGitlabYamlConfig(prodParams, project, gitlabApi),
+      deleteGitlabYamlConfig(hProdParams, project, gitlabApi),
     ])
 
     return {
@@ -135,15 +130,3 @@ export const deleteProject: StepCall<Project> = async (payload) => {
     }
   }
 }
-
-export const upsertGrafanaConfig = (params: BaseParams, keycloakApi: KeycloakProjectApi) => [
-  ensureDataSource(params, 'alert-manager'),
-  ensureDataSource(params, 'prometheus'),
-  ensureDataSource(params, 'loki'),
-  ensureGrafanaInstance(params, keycloakApi),
-]
-
-export const deleteGrafanaConfig = (params: BaseParams) => [
-  deleteGrafanaInstance(params),
-  deleteAllDataSources(params),
-]

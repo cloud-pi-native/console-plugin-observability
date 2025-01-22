@@ -1,39 +1,43 @@
+import type { Project } from '@cpn-console/hooks'
+import type { VaultProjectApi } from '@cpn-console/vault-plugin/types/class.js'
+import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
+import type {
+  Project as GitlabProject,
+  Group,
+} from './gitlab.js'
+import type { BaseParams } from './utils.js'
 // @ts-ignore
 import yaml from 'js-yaml'
-import { Gitlab as IGitlab } from '@gitbeaker/core'
-import { type Project } from '@cpn-console/hooks'
 import {
+  commitAndPushYamlFile,
   createGroup,
+  createProject,
   findGroup,
   findProject,
-  Group,
-  Project as GitlabProject,
-  createProject,
   getGitlabYamlFileContent,
-  commitAndPushYamlFile,
 } from './gitlab.js'
-import { BaseParams } from './utils.js'
 
 const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 
 interface ProjectLoki {
-  name: string;
-  groups: string[];
-  uuid: string;
+  name: string
+  groups: string[]
+  uuid: string
+  // urls: string[]
 }
 
 interface YamlLokiData {
   global: {
-    tenants: ProjectLoki[];
-  };
+    tenants: ProjectLoki[]
+  }
 }
 
-export const readYamlFile = async <T> (fileContent: string): Promise<T> => {
+export async function readYamlFile<T>(fileContent: string): Promise<T> {
   return yaml.load(fileContent) as T
 }
 
-export const writeYamlFile = (data: object): string => {
+export function writeYamlFile(data: object): string {
   try {
     return yaml.dump(data, {
       styles: {
@@ -48,54 +52,42 @@ export const writeYamlFile = (data: object): string => {
   }
 }
 
-const findOrCreateGroup = async (
-  api: IGitlab,
-  groupName: string,
-) => {
-  const group = await findGroup(api, groupName)
-  return group ?? await createGroup(api, groupName)
+async function findOrCreateGroup(gitlabApi: GitlabInterface, groupName: string) {
+  const group = await findGroup(gitlabApi, groupName)
+  return group ?? await createGroup(gitlabApi, groupName)
 }
 
-const findOrCreateRepo = async (
-  api: IGitlab,
-  group: Group,
-  repoName: string,
-): Promise<GitlabProject> => {
+async function findOrCreateRepo(gitlabApi: GitlabInterface, group: Group, repoName: string): Promise<GitlabProject> {
   try {
-    const repo = await findProject(api, group, repoName)
+    const repo = await findProject(gitlabApi, group, repoName)
     if (!repo) {
-      return await createProject(api, group, repoName, 'Repo for obervatorium values, managed by DSO console');
+      return await createProject(gitlabApi, group, repoName, 'Repo for obervatorium values, managed by DSO console')
     }
     return repo
-  } catch (error: any) {
-    throw new Error('error')
+  } catch (error) {
+    throw new Error(`Unexpected error: ${error}`)
   }
 }
 
 // Fonction pour trouver ou créer un fichier values.yaml
-const findOrCreateValuesFile = async (
-  api: IGitlab,
-  project: GitlabProject,
-): Promise<string> => {
+async function findOrCreateValuesFile(gitlabApi: GitlabInterface, project: GitlabProject): Promise<string> {
   const yamlData = `
   global:
-    tenants:
-      - name: DSO
-        groups: ["/security"]
+    tenants: []
   `
 
   try {
     // Essayer de récupérer le fichier
     const file = await getGitlabYamlFileContent(
-      api,
+      gitlabApi,
       project,
       valuesPath,
       valuesBranch,
     )
     return Buffer.from(file.content, 'base64').toString('utf-8')
-  } catch (error) {
+  } catch (_error) {
     await commitAndPushYamlFile(
-      api,
+      gitlabApi,
       project,
       valuesPath,
       valuesBranch,
@@ -106,24 +98,35 @@ const findOrCreateValuesFile = async (
   }
 }
 
-export const upsertGitlabConfig = async (params: BaseParams, keycloakRootGroupPath: string, project: Project, api: IGitlab) => {
+export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPath: string, project: Project, gitlabApi: GitlabInterface, _vaultApi: VaultProjectApi) {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
-  const gitlabLokiGroup = await findOrCreateGroup(api, lokiGroupName)
-  const gitlabLokiRepo = await findOrCreateRepo(api, gitlabLokiGroup, lokiRepoName)
+  const gitlabLokiGroup = await findOrCreateGroup(gitlabApi, lokiGroupName)
+  const gitlabLokiRepo = await findOrCreateRepo(gitlabApi, gitlabLokiGroup, lokiRepoName)
 
   // Récupérer ou créer le fichier values.yaml
-  const file = await findOrCreateValuesFile(api, gitlabLokiRepo)
+  const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
   let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
   const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
   const tenantRbac = [`${keycloakRootGroupPath}/grafana/${params.stage}-RW`, `${keycloakRootGroupPath}/grafana/${params.stage}-RO`]
 
+  // const infraReposUrls: string[] = []
+  // for (const repo of project.repositories) {
+  //   if (repo.isInfra) {
+  //     const repoInternalUrl = (await vaultApi.read(`${params.organizationName}/${params.projectName}/${repo.internalRepoName}-mirror`)).data.GIT_OUTPUT_URL as string
+  //     if (repoInternalUrl) {
+  //       infraReposUrls.push(`https://${repoInternalUrl}`)
+  //     }
+  //   }
+  // }
+
   const projectData: ProjectLoki = {
     name: tenantName,
     groups: tenantRbac,
     uuid: project.id,
+    // urls: infraReposUrls,
   }
 
   if (findTenantByName(yamlFile, tenantName)) {
@@ -135,7 +138,7 @@ export const upsertGitlabConfig = async (params: BaseParams, keycloakRootGroupPa
   const yamlString = writeYamlFile(yamlFile)
 
   return commitAndPushYamlFile(
-    api,
+    gitlabApi,
     gitlabLokiRepo,
     valuesPath,
     valuesBranch,
@@ -144,21 +147,21 @@ export const upsertGitlabConfig = async (params: BaseParams, keycloakRootGroupPa
   )
 }
 
-export const deleteGitlabYamlConfig = async (params: BaseParams, project: Project, api: IGitlab) => {
+export async function deleteGitlabYamlConfig(params: BaseParams, project: Project, gitlabApi: GitlabInterface) {
   // Même logique de groupe et de repo que pour l'upsert
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
-  const gitlabLokiGroup = await findOrCreateGroup(api, lokiGroupName)
-  const gitlabLokiRepo = await findOrCreateRepo(api, gitlabLokiGroup, lokiRepoName)
+  const gitlabLokiGroup = await findOrCreateGroup(gitlabApi, lokiGroupName)
+  const gitlabLokiRepo = await findOrCreateRepo(gitlabApi, gitlabLokiGroup, lokiRepoName)
 
   // Récupérer le fichier values.yaml
-  const file = await findOrCreateValuesFile(api, gitlabLokiRepo)
+  const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
   let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
   const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
 
   // Rechercher le projet à supprimer
-  const projectToDelete = yamlFile.global.tenants.find((tenant) => tenant.name === tenantName)
+  const projectToDelete = yamlFile.global.tenants.find(tenant => tenant.name === tenantName)
   if (!projectToDelete) {
     return
   }
@@ -168,7 +171,7 @@ export const deleteGitlabYamlConfig = async (params: BaseParams, project: Projec
   const yamlString = writeYamlFile(yamlFile)
 
   return commitAndPushYamlFile(
-    api,
+    gitlabApi,
     gitlabLokiRepo,
     valuesPath,
     valuesBranch,
@@ -177,8 +180,7 @@ export const deleteGitlabYamlConfig = async (params: BaseParams, project: Projec
   )
 }
 
-
-const addYamlObjectToRepo = (data: YamlLokiData, newProject: ProjectLoki): YamlLokiData => {
+function addYamlObjectToRepo(data: YamlLokiData, newProject: ProjectLoki): YamlLokiData {
   return {
     ...data,
     global: {
@@ -188,14 +190,11 @@ const addYamlObjectToRepo = (data: YamlLokiData, newProject: ProjectLoki): YamlL
   }
 }
 
-const findTenantByName = (
-  data: YamlLokiData,
-  name: string,
-): ProjectLoki | undefined => {
-  return data.global.tenants.find((tenant) => tenant.name === name)
+function findTenantByName(data: YamlLokiData, name: string): ProjectLoki | undefined {
+  return data.global.tenants.find(tenant => tenant.name === name)
 }
 
-const removeRepo = (data: YamlLokiData, uuid: string): YamlLokiData => {
+function removeRepo(data: YamlLokiData, uuid: string): YamlLokiData {
   return {
     ...data,
     global: {
