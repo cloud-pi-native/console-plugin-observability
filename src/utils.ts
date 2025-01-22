@@ -2,7 +2,7 @@ import { requiredEnv } from '@cpn-console/shared'
 import { CoreV1Api, CustomObjectsApi, KubeConfig } from '@kubernetes/client-node'
 
 const config: {
-  grafanaHost?: string
+  grafanaUrl?: string
   kubeconfigPath?: string
   kubeconfigCtx?: string
   keycloakProtocol?: string
@@ -11,7 +11,7 @@ const config: {
   keycloakToken?: string
   keycloakUser?: string
 } = {
-  grafanaHost: undefined,
+  grafanaUrl: undefined,
   kubeconfigPath: undefined,
   kubeconfigCtx: undefined,
   keycloakProtocol: undefined,
@@ -22,9 +22,7 @@ const config: {
 }
 
 export function getConfig(): Required<typeof config> {
-  config.grafanaHost = config.grafanaHost ?? requiredEnv('GRAFANA_HOST')
-  config.kubeconfigPath = config.kubeconfigPath ?? requiredEnv('KUBECONFIG_PATH')
-  config.kubeconfigCtx = config.kubeconfigCtx ?? requiredEnv('KUBECONFIG_CTX')
+  config.grafanaUrl = config.grafanaUrl ?? requiredEnv('GRAFANA_URL')
   config.keycloakProtocol = config.keycloakProtocol ?? requiredEnv('KEYCLOAK_PROTOCOL')
   config.keycloakDomain = config.keycloakDomain ?? requiredEnv('KEYCLOAK_DOMAIN')
   config.keycloakRealm = config.keycloakRealm ?? requiredEnv('KEYCLOAK_REALM')
@@ -35,8 +33,8 @@ export function getConfig(): Required<typeof config> {
 }
 
 function getClient() {
-  const kubeconfigCtx = getConfig().kubeconfigCtx
-  const kubeconfigPath = getConfig().kubeconfigPath
+  const kubeconfigCtx = process.env.KUBECONFIG_CTX
+  const kubeconfigPath = process.env.KUBECONFIG_PATH
   const kc = new KubeConfig()
   if (kubeconfigPath) {
     kc.loadFromFile(kubeconfigPath)

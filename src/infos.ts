@@ -5,11 +5,11 @@ const infos: ServiceInfos = {
   name: 'observability',
   to: ({ project, organization }) => [
     {
-      to: `https://${getConfig().grafanaHost}/hprod-${organization}-${project}`,
+      to: `${getConfig().grafanaUrl}/hprod-${organization}-${project}`,
       title: 'Hors production',
     },
     {
-      to: `https:///${getConfig().grafanaHost}/prod-${organization}-${project}`,
+      to: `${getConfig().grafanaUrl}/prod-${organization}-${project}`,
       title: 'Production',
     },
   ],
