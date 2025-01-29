@@ -1,11 +1,10 @@
 import type { Project } from '@cpn-console/hooks'
-import type { VaultProjectApi } from '@cpn-console/vault-plugin/types/class.js'
 import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
 import type {
   Project as GitlabProject,
   Group,
 } from './gitlab.js'
-import type { BaseParams } from './utils.js'
+import type { TenantKeycloakMapper } from './utils.js'
 // @ts-ignore
 import yaml from 'js-yaml'
 import {
@@ -98,7 +97,7 @@ async function findOrCreateValuesFile(gitlabApi: GitlabInterface, project: Gitla
   }
 }
 
-export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPath: string, project: Project, gitlabApi: GitlabInterface, _vaultApi: VaultProjectApi) {
+export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, tenants: TenantKeycloakMapper) {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
@@ -109,35 +108,46 @@ export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPa
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
   let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
-  const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
-  const tenantRbac = [`${keycloakRootGroupPath}/grafana/${params.stage}-RW`, `${keycloakRootGroupPath}/grafana/${params.stage}-RO`]
+  let needUpdates = false
 
-  // const infraReposUrls: string[] = []
-  // for (const repo of project.repositories) {
-  //   if (repo.isInfra) {
-  //     const repoInternalUrl = (await vaultApi.read(`${params.organizationName}/${params.projectName}/${repo.internalRepoName}-mirror`)).data.GIT_OUTPUT_URL as string
-  //     if (repoInternalUrl) {
-  //       infraReposUrls.push(`https://${repoInternalUrl}`)
-  //     }
-  //   }
-  // }
+  const shouldBeRemoved: string[] = []
+  let notFoundTenants: string[] = Object.keys(tenants)
 
-  const projectData: ProjectLoki = {
-    name: tenantName,
-    groups: tenantRbac,
+  for (const tenant of yamlFile.global.tenants) {
+    if (tenant.uuid !== project.id) continue
+    if (tenant.name in tenants) {
+      if (tenant.groups.toString() !== tenants[tenant.name].toString()) {
+        needUpdates = true
+        tenant.groups = structuredClone(tenants[tenant.name])
+      }
+      notFoundTenants = notFoundTenants.filter(notFoundTenant => notFoundTenant !== tenant.name)
+    } else {
+      needUpdates = true
+      shouldBeRemoved.push(tenant.name)
+    }
+  }
+
+  const newTenants = notFoundTenants.map((notFoundTenant): ProjectLoki => ({
+    groups: structuredClone(tenants[notFoundTenant]),
+    name: notFoundTenant,
     uuid: project.id,
-    // urls: infraReposUrls,
+  }))
+
+  yamlFile = {
+    ...yamlFile,
+    global: {
+      ...yamlFile.global,
+      tenants: [...yamlFile.global.tenants.filter(tenant => tenant.uuid !== project.id || !shouldBeRemoved.includes(tenant.name)), ...newTenants],
+    },
   }
 
-  if (findTenantByName(yamlFile, tenantName)) {
-    return
+  if (!needUpdates && !newTenants.length) {
+    return 'Already up-to-date'
   }
 
-  // Modifier le fichier YAML et commiter
-  yamlFile = addYamlObjectToRepo(yamlFile, projectData)
   const yamlString = writeYamlFile(yamlFile)
 
-  return commitAndPushYamlFile(
+  await commitAndPushYamlFile(
     gitlabApi,
     gitlabLokiRepo,
     valuesPath,
@@ -145,9 +155,10 @@ export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPa
     `Add project ${project.name}`,
     yamlString,
   )
+  return `created: ${newTenants.map(tenant => tenant.name)}, deleted: ${shouldBeRemoved}`
 }
 
-export async function deleteGitlabYamlConfig(params: BaseParams, project: Project, gitlabApi: GitlabInterface) {
+export async function deleteGitlabYamlConfig(project: Project, gitlabApi: GitlabInterface) {
   // Même logique de groupe et de repo que pour l'upsert
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
@@ -158,16 +169,13 @@ export async function deleteGitlabYamlConfig(params: BaseParams, project: Projec
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
   let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
-  const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
-
   // Rechercher le projet à supprimer
-  const projectToDelete = yamlFile.global.tenants.find(tenant => tenant.name === tenantName)
-  if (!projectToDelete) {
+  if (!yamlFile.global.tenants.find(tenant => tenant.uuid === project.id)) {
     return
   }
 
   // Modifier le fichier YAML et commiter
-  yamlFile = removeRepo(yamlFile, projectToDelete.uuid)
+  yamlFile = removeProject(yamlFile, project.id)
   const yamlString = writeYamlFile(yamlFile)
 
   return commitAndPushYamlFile(
@@ -180,21 +188,7 @@ export async function deleteGitlabYamlConfig(params: BaseParams, project: Projec
   )
 }
 
-function addYamlObjectToRepo(data: YamlLokiData, newProject: ProjectLoki): YamlLokiData {
-  return {
-    ...data,
-    global: {
-      ...data.global,
-      tenants: [...data.global.tenants, newProject],
-    },
-  }
-}
-
-function findTenantByName(data: YamlLokiData, name: string): ProjectLoki | undefined {
-  return data.global.tenants.find(tenant => tenant.name === name)
-}
-
-function removeRepo(data: YamlLokiData, uuid: string): YamlLokiData {
+function removeProject(data: YamlLokiData, uuid: string): YamlLokiData {
   return {
     ...data,
     global: {

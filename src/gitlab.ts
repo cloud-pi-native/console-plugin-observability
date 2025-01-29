@@ -55,7 +55,6 @@ export async function getGitlabYamlFileContent(api: IGitlab, project: Project, f
 
 // Fonction pour éditer, committer et pousser un fichier YAML
 export async function commitAndPushYamlFile(api: IGitlab, project: Project, filePath: string, branch: string, commitMessage: string, yamlString: string): Promise<void> {
-  console.log('yamlString: ', yamlString)
   const encodedContent = Buffer.from(yamlString).toString('utf-8')
   try {
     // Vérifier si le fichier existe déjà

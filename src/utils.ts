@@ -62,8 +62,11 @@ export function getCustomK8sApi(): CustomObjectsApi {
 
 export type Stage = 'prod' | 'hprod'
 
-export interface BaseParams {
-  organizationName: string
-  projectName: string
-  stage: Stage
+export interface TenantKeycloakMapper {
+  [x: string]: string[]
+}
+
+const re = /[a-z0-9]{25}--[a-z0-9]{25}/
+export function isNewNsName(ns: string) {
+  return re.test(ns)
 }
