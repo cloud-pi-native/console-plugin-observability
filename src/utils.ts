@@ -62,8 +62,13 @@ export function getCustomK8sApi(): CustomObjectsApi {
 
 export type Stage = 'prod' | 'hprod'
 
+export interface TenantInfo {
+  groups: string[]
+  type: 'prod' | 'hprod'
+  name: string // tenant name, short-uuid or slug
+}
 export interface TenantKeycloakMapper {
-  [x: string]: string[]
+  [x: string]: TenantInfo // fullName, type + (short-uuid or slug)
 }
 
 const re = /[a-z0-9]{25}--[a-z0-9]{25}/

@@ -84,11 +84,19 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       if (!environment.apis.kubernetes) {
         throw new Error(`no kubernetes apis on environment ${environment.name}`)
       }
-      const gen = isNewNsName(await environment.apis.kubernetes.getNsName()) ? compressedUUID : project.slug
+      const name = isNewNsName(await environment.apis.kubernetes.getNsName()) ? compressedUUID : project.slug
       if (environment.stage === 'prod') {
-        tenantsToCreate[`prod-${gen}`] = tenantRbacProd
+        tenantsToCreate[`prod-${name}`] = {
+          groups: tenantRbacProd,
+          name,
+          type: 'prod',
+        }
       } else {
-        tenantsToCreate[`hprod-${gen}`] = tenantRbacHProd
+        tenantsToCreate[`hprod-${name}`] = {
+          groups: tenantRbacHProd,
+          name,
+          type: 'hprod',
+        }
       }
     }
 

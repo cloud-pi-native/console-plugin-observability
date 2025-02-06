@@ -8,24 +8,45 @@ const imageData = Buffer.from((readFileSync(join(import.meta.dirname, '../files/
 
 const infos = {
   name: 'observability',
-  to: ({ project }) => [
-    {
-      to: `${getConfig().grafanaUrl}/prod-${compressUUID(project.id)}`,
-      description: 'Production',
-    },
-    {
-      to: `${getConfig().grafanaUrl}/prod-${project.slug}`,
-      description: 'Production ancien',
-    },
-    {
-      to: `${getConfig().grafanaUrl}/hprod-${compressUUID(project.id)}`,
-      description: 'Hors production',
-    },
-    {
-      to: `${getConfig().grafanaUrl}/hprod-${project.slug}`,
-      description: 'Hors production ancien',
-    },
-  ],
+  // @ts-ignore retro compatibility
+  to: ({ project, projectId, organization }) => {
+    let isInfV9 = false
+    const params = {
+      id: '',
+      slug: '',
+    }
+    const grafanaUrl = getConfig().grafanaUrl
+    if (typeof project === 'string' && typeof organization === 'string') {
+      params.id = projectId
+      params.slug = `${organization}-${project}`
+      isInfV9 = true
+    } else {
+      params.id = project.id
+      params.slug = project.slug
+    }
+    return [
+      {
+        to: `${grafanaUrl}/prod-${compressUUID(String(params.id))}`,
+        title: isInfV9 ? 'Production' : undefined,
+        description: 'Production',
+      },
+      {
+        to: `${grafanaUrl}/prod-${params.slug}`,
+        title: isInfV9 ? 'Production ancien' : undefined,
+        description: 'Production ancien',
+      },
+      {
+        to: `${grafanaUrl}/hprod-${compressUUID(String(params.id))}`,
+        title: isInfV9 ? 'Hors production' : undefined,
+        description: 'Hors production',
+      },
+      {
+        to: `${grafanaUrl}/hprod-${params.slug}`,
+        title: isInfV9 ? 'Hors production ancien' : undefined,
+        description: 'Hors production ancien',
+      },
+    ]
+  },
   title: 'Grafana',
   imgSrc: `data:image/png;base64,${imageData}`,
   description: 'Grafana est un outil de métrique et de logs',

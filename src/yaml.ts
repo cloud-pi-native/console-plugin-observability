@@ -4,7 +4,7 @@ import type {
   Project as GitlabProject,
   Group,
 } from './gitlab.js'
-import type { TenantKeycloakMapper } from './utils.js'
+import type { TenantInfo, TenantKeycloakMapper } from './utils.js'
 // @ts-ignore
 import yaml from 'js-yaml'
 import {
@@ -20,9 +20,11 @@ const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 
 interface ProjectLoki {
-  name: string
+  project: string // slug
+  name: string // slug ou short-uuid (capture regex)
   groups: string[]
-  uuid: string
+  uuid: string // uuid du projet
+  type: 'prod' | 'hprod'
   // urls: string[]
 }
 
@@ -115,12 +117,26 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
 
   for (const tenant of yamlFile.global.tenants) {
     if (tenant.uuid !== project.id) continue
-    if (tenant.name in tenants) {
-      if (tenant.groups.toString() !== tenants[tenant.name].toString()) {
+    const fullName = `${tenant.type}-${tenant.name}`
+    const matchingTenant = tenants[fullName] as TenantInfo | undefined
+    if (matchingTenant) {
+      if (tenant.groups.toString() !== tenants[tenant.name].groups.toString()) {
         needUpdates = true
-        tenant.groups = structuredClone(tenants[tenant.name])
+        tenant.groups = structuredClone(tenants[tenant.name].groups)
       }
-      notFoundTenants = notFoundTenants.filter(notFoundTenant => notFoundTenant !== tenant.name)
+      if (tenant.project !== project.slug) {
+        needUpdates = true
+        tenant.project = project.slug
+      }
+      if (tenant.name !== matchingTenant.name) {
+        needUpdates = true
+        tenant.name = matchingTenant.name
+      }
+      if (tenant.type !== matchingTenant.type) {
+        needUpdates = true
+        tenant.type = matchingTenant.type
+      }
+      notFoundTenants = notFoundTenants.filter(notFoundTenant => notFoundTenant !== fullName)
     } else {
       needUpdates = true
       shouldBeRemoved.push(tenant.name)
@@ -128,9 +144,9 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
   }
 
   const newTenants = notFoundTenants.map((notFoundTenant): ProjectLoki => ({
-    groups: structuredClone(tenants[notFoundTenant]),
-    name: notFoundTenant,
+    ...structuredClone(tenants[notFoundTenant]),
     uuid: project.id,
+    project: project.slug,
   }))
 
   yamlFile = {
