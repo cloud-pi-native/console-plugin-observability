@@ -4,7 +4,6 @@ import type {
   Project as GitlabProject,
   Group,
 } from './gitlab.js'
-import type { TenantInfo, TenantKeycloakMapper } from './utils.js'
 // @ts-ignore
 import yaml from 'js-yaml'
 import {
@@ -19,18 +18,29 @@ import {
 const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 
-interface ProjectLoki {
-  project: string // slug
-  name: string // slug ou short-uuid (capture regex)
-  groups: string[]
-  uuid: string // uuid du projet
-  type: 'prod' | 'hprod'
+export type Type = 'prod' | 'hprod'
+interface Tenant {}
+
+interface Env {
+  groups?: string[]
+  tenants: {
+    [x: `${Type}-${string}`]: Tenant
+  }
+}
+export interface ProjectLoki {
+  projectName: string // slug
+  envs: {
+    prod: Env
+    hprod: Env
+  }
   // urls: string[]
 }
 
 interface YamlLokiData {
-  global: {
-    tenants: ProjectLoki[]
+  global?: {
+    projects?: {
+      [x: string]: ProjectLoki
+    }
   }
 }
 
@@ -99,7 +109,7 @@ async function findOrCreateValuesFile(gitlabApi: GitlabInterface, project: Gitla
   }
 }
 
-export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, tenants: TenantKeycloakMapper) {
+export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, projectValue: ProjectLoki) {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
@@ -108,70 +118,27 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
 
   // Récupérer ou créer le fichier values.yaml
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
+  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
-  let needUpdates = false
-
-  const shouldBeRemoved: string[] = []
-  let notFoundTenants: string[] = Object.keys(tenants)
-
-  for (const tenant of yamlFile.global.tenants) {
-    if (tenant.uuid !== project.id) continue
-    const fullName = `${tenant.type}-${tenant.name}`
-    const matchingTenant = tenants[fullName] as TenantInfo | undefined
-    if (matchingTenant) {
-      if (tenant.groups.toString() !== tenants[tenant.name].groups.toString()) {
-        needUpdates = true
-        tenant.groups = structuredClone(tenants[tenant.name].groups)
-      }
-      if (tenant.project !== project.slug) {
-        needUpdates = true
-        tenant.project = project.slug
-      }
-      if (tenant.name !== matchingTenant.name) {
-        needUpdates = true
-        tenant.name = matchingTenant.name
-      }
-      if (tenant.type !== matchingTenant.type) {
-        needUpdates = true
-        tenant.type = matchingTenant.type
-      }
-      notFoundTenants = notFoundTenants.filter(notFoundTenant => notFoundTenant !== fullName)
-    } else {
-      needUpdates = true
-      shouldBeRemoved.push(tenant.name)
-    }
-  }
-
-  const newTenants = notFoundTenants.map((notFoundTenant): ProjectLoki => ({
-    ...structuredClone(tenants[notFoundTenant]),
-    uuid: project.id,
-    project: project.slug,
-  }))
-
-  yamlFile = {
+  const projects = yamlFile.global?.projects || {}
+  projects[project.id] = projectValue
+  const yamlString = writeYamlFile({
     ...yamlFile,
     global: {
       ...yamlFile.global,
-      tenants: [...yamlFile.global.tenants.filter(tenant => tenant.uuid !== project.id || !shouldBeRemoved.includes(tenant.name)), ...newTenants],
+      projects,
     },
-  }
-
-  if (!needUpdates && !newTenants.length) {
-    return 'Already up-to-date'
-  }
-
-  const yamlString = writeYamlFile(yamlFile)
+  })
 
   await commitAndPushYamlFile(
     gitlabApi,
     gitlabLokiRepo,
     valuesPath,
     valuesBranch,
-    `Add project ${project.name}`,
+    `Update project ${project.slug}`,
     yamlString,
   )
-  return `created: ${newTenants.map(tenant => tenant.name)}, deleted: ${shouldBeRemoved}`
+  return `Update: ${project.slug}`
 }
 
 export async function deleteGitlabYamlConfig(project: Project, gitlabApi: GitlabInterface) {
@@ -183,16 +150,16 @@ export async function deleteGitlabYamlConfig(project: Project, gitlabApi: Gitlab
 
   // Récupérer le fichier values.yaml
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
+  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
   // Rechercher le projet à supprimer
-  if (!yamlFile.global.tenants.find(tenant => tenant.uuid === project.id)) {
+  if (yamlFile.global?.projects && !(project.id in yamlFile.global.projects)) {
     return
   }
 
   // Modifier le fichier YAML et commiter
-  yamlFile = removeProject(yamlFile, project.id)
-  const yamlString = writeYamlFile(yamlFile)
+  const yamlFileStripped = removeProject(yamlFile, project.id)
+  const yamlString = writeYamlFile(yamlFileStripped)
 
   return commitAndPushYamlFile(
     gitlabApi,
@@ -205,11 +172,37 @@ export async function deleteGitlabYamlConfig(project: Project, gitlabApi: Gitlab
 }
 
 function removeProject(data: YamlLokiData, uuid: string): YamlLokiData {
-  return {
-    ...data,
-    global: {
-      ...data.global,
-      tenants: data.global.tenants.filter(tenant => tenant.uuid !== uuid),
-    },
-  }
+  const strippedData = structuredClone(data)
+  delete strippedData.global?.projects?.[uuid]
+  return strippedData
 }
+
+// function _doesValuesDiff(actuaValues: ProjectLoki, expectedValue: ProjectLoki): boolean {
+//   if (actuaValues.projectName !== expectedValue.projectName)
+//     return true
+
+//   const actualEnvKeys = Object.entries(actuaValues.envs) as [['prod' | 'hprod', Env] ]
+//   if (actualEnvKeys.length !== Object.keys(expectedValue.envs).length)
+//     return true
+
+//   for (const [envName, envValue] of actualEnvKeys) {
+//     if (!(envName in expectedValue.envs))
+//       return true
+
+//     if (!envValue.groups) return true
+//     if (!expectedValue.envs[envName]?.groups) return true
+
+//     if (envValue.groups.toString() !== expectedValue.envs[envName]?.groups.toString())
+//       return true
+
+//     const envTenants = Object.keys(envValue.tenants)
+//     if (envTenants.length !== Object.keys(expectedValue.envs[envName]?.tenants ?? {}).length)
+//       return true
+
+//     for (const tenantName of envTenants) {
+//       if (expectedValue.envs[envName] && !(tenantName in expectedValue.envs[envName].tenants))
+//         return true
+//     }
+//   }
+//   return false
+// }

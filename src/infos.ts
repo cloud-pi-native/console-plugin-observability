@@ -1,7 +1,7 @@
 import type { ServiceInfos } from '@cpn-console/hooks'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { compressUUID, ENABLED } from '@cpn-console/shared'
+import { ENABLED } from '@cpn-console/shared'
 import { getConfig } from './utils.js'
 
 const imageData = Buffer.from((readFileSync(join(import.meta.dirname, '../files/logo.png'))).toString('base64'))
@@ -9,7 +9,7 @@ const imageData = Buffer.from((readFileSync(join(import.meta.dirname, '../files/
 const infos = {
   name: 'observability',
   // @ts-ignore retro compatibility
-  to: ({ project, projectId, organization }) => {
+  to: ({ project, projectId, organization, store }) => {
     let isInfV9 = false
     const params = {
       id: '',
@@ -24,28 +24,23 @@ const infos = {
       params.id = project.id
       params.slug = project.slug
     }
-    return [
-      {
-        to: `${grafanaUrl}/prod-${compressUUID(String(params.id))}`,
-        title: isInfV9 ? 'Production' : undefined,
-        description: 'Production',
-      },
-      {
-        to: `${grafanaUrl}/prod-${params.slug}`,
-        title: isInfV9 ? 'Production ancien' : undefined,
-        description: 'Production ancien',
-      },
-      {
-        to: `${grafanaUrl}/hprod-${compressUUID(String(params.id))}`,
+    const urls: Array<{ to: string, title?: string, description: string }> = []
+    const instances = store.observability?.instances?.split(',') ?? []
+    if (instances.includes('hprod')) {
+      urls.push({
+        to: `${grafanaUrl}/hprod-${params.slug}`,
         title: isInfV9 ? 'Hors production' : undefined,
         description: 'Hors production',
-      },
-      {
-        to: `${grafanaUrl}/hprod-${params.slug}`,
-        title: isInfV9 ? 'Hors production ancien' : undefined,
-        description: 'Hors production ancien',
-      },
-    ]
+      })
+    }
+    if (instances.includes('prod')) {
+      urls.push({
+        to: `${grafanaUrl}/prod-${params.slug}`,
+        title: isInfV9 ? 'Production' : undefined,
+        description: 'Production',
+      })
+    }
+    return urls
   },
   title: 'Grafana',
   imgSrc: `data:image/png;base64,${imageData}`,
@@ -63,7 +58,17 @@ const infos = {
       value: ENABLED,
       description: 'Activer le plugin',
     }],
-    project: [],
+    project: [{
+      kind: 'text',
+      key: 'instances',
+      permissions: {
+        admin: { read: false, write: false },
+        user: { read: false, write: false },
+      },
+      title: 'Instances actives',
+      value: '',
+      description: '',
+    }],
   },
 } as const satisfies ServiceInfos
 

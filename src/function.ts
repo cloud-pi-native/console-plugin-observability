@@ -5,8 +5,8 @@ import { parseError, specificallyDisabled } from '@cpn-console/hooks'
 import { compressUUID, removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
 import { Gitlab } from '@gitbeaker/rest'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
-import { isNewNsName, type TenantKeycloakMapper } from './utils.js'
-import { deleteGitlabYamlConfig, upsertGitlabConfig } from './yaml.js'
+import { isNewNsName } from './utils.js'
+import { deleteGitlabYamlConfig, type ProjectLoki, type Type, upsertGitlabConfig } from './yaml.js'
 
 const okSkipped: PluginResult = {
   status: {
@@ -78,38 +78,53 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 
     const compressedUUID = compressUUID(project.id)
 
-    const tenantsToCreate: TenantKeycloakMapper = {}
+    const projectValue: ProjectLoki = {
+      projectName: project.slug,
+      envs: {
+        hprod: {
+          groups: tenantRbacHProd,
+          tenants: {},
+        },
+        prod: {
+          groups: tenantRbacProd,
+          tenants: {},
+        },
+      },
+    }
 
     for (const environment of payload.args.environments) {
       if (!environment.apis.kubernetes) {
         throw new Error(`no kubernetes apis on environment ${environment.name}`)
       }
-      const name = isNewNsName(await environment.apis.kubernetes.getNsName()) ? compressedUUID : project.slug
-      if (environment.stage === 'prod') {
-        tenantsToCreate[`prod-${name}`] = {
-          groups: tenantRbacProd,
-          name,
-          type: 'prod',
-        }
-      } else {
-        tenantsToCreate[`hprod-${name}`] = {
-          groups: tenantRbacHProd,
-          name,
-          type: 'hprod',
-        }
-      }
+      const namespace = await environment.apis.kubernetes.getNsName()
+      const name = isNewNsName(namespace) ? compressedUUID : project.slug
+      console.log({ namespace, name })
+      const env: Type = environment.stage === 'prod' ? 'prod' : 'hprod'
+      projectValue.envs[env].tenants[`${env}-${name}`] = {}
+    }
+
+    if (projectValue.envs.hprod && !Object.values(projectValue.envs.hprod?.tenants).length) {
+      // @ts-ignore
+      delete projectValue.envs.hprod
+    }
+    if (projectValue.envs.prod && !Object.values(projectValue.envs.prod?.tenants).length) {
+      // @ts-ignore
+      delete projectValue.envs.prod
     }
 
     const listPerms = getListPrems(project.environments)
 
     // Upsert or delete Gitlab config based on prod/non-prod environment
-    const yamlResult = await upsertGitlabConfig(project, gitlabApi, tenantsToCreate)
+    const yamlResult = await upsertGitlabConfig(project, gitlabApi, projectValue)
     await ensureKeycloakGroups(listPerms, keycloakApi)
 
     return {
       status: {
         result: 'OK',
         message: yamlResult,
+      },
+      store: {
+        instances: Object.keys(projectValue.envs).join(','),
       },
     }
   } catch (error) {

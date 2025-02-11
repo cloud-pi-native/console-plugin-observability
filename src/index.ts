@@ -22,4 +22,5 @@ export const plugin: Plugin = {
 
 declare module '@cpn-console/hooks' {
   interface Config extends DeclareModuleGenerator<typeof infos, 'global'> {}
+  interface ProjectStore extends DeclareModuleGenerator<typeof infos, 'project'> {}
 }
