@@ -121,7 +121,13 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
   const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
   const projects = yamlFile.global?.projects || {}
+
+  if (JSON.stringify(projects[project.id]) === JSON.stringify(projectValue)) {
+    return 'Already up-to-date'
+  }
+
   projects[project.id] = projectValue
+
   const yamlString = writeYamlFile({
     ...yamlFile,
     global: {
