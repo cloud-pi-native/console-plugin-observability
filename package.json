@@ -1,7 +1,7 @@
 {
   "name": "@cpn-console/observability-plugin",
   "type": "module",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Loki plugin for DSO console",
   "exports": {
     ".": {
@@ -26,7 +26,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@cpn-console/hooks": "^2.5.0",
+    "@cpn-console/hooks": "^4.0.0",
     "@gitbeaker/core": "~40.6.0",
     "@gitbeaker/requester-utils": "~40.6.0",
     "@gitbeaker/rest": "~40.6.0",
@@ -39,12 +39,12 @@
   "devDependencies": {
     "@antfu/eslint-config": "^3.16.0",
     "@cpn-console/eslint-config": "^1.0.2",
-    "@cpn-console/gitlab-plugin": "^3.0.0",
-    "@cpn-console/keycloak-plugin": "^2.0.6",
-    "@cpn-console/kubernetes-plugin": "^2.1.1",
+    "@cpn-console/gitlab-plugin": "^3.1.0",
+    "@cpn-console/keycloak-plugin": "^2.1.0",
+    "@cpn-console/kubernetes-plugin": "^2.3.0",
     "@cpn-console/shared": "^1.2.0",
     "@cpn-console/ts-config": "^1.1.0",
-    "@cpn-console/vault-plugin": "^2.2.1",
+    "@cpn-console/vault-plugin": "^2.2.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.7",
     "@types/uuid": "^10.0.0",

@@ -1,11 +1,9 @@
 import type { Project } from '@cpn-console/hooks'
-import type { VaultProjectApi } from '@cpn-console/vault-plugin/types/class.js'
 import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
 import type {
   Project as GitlabProject,
   Group,
 } from './gitlab.js'
-import type { BaseParams } from './utils.js'
 // @ts-ignore
 import yaml from 'js-yaml'
 import {
@@ -20,16 +18,29 @@ import {
 const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 
-interface ProjectLoki {
-  name: string
-  groups: string[]
-  uuid: string
+export type Type = 'prod' | 'hprod'
+interface Tenant {}
+
+interface Env {
+  groups?: string[]
+  tenants: {
+    [x: `${Type}-${string}`]: Tenant
+  }
+}
+export interface ProjectLoki {
+  projectName: string // slug
+  envs: {
+    prod: Env
+    hprod: Env
+  }
   // urls: string[]
 }
 
 interface YamlLokiData {
-  global: {
-    tenants: ProjectLoki[]
+  global?: {
+    projects?: {
+      [x: string]: ProjectLoki
+    }
   }
 }
 
@@ -98,7 +109,7 @@ async function findOrCreateValuesFile(gitlabApi: GitlabInterface, project: Gitla
   }
 }
 
-export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPath: string, project: Project, gitlabApi: GitlabInterface, _vaultApi: VaultProjectApi) {
+export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, projectValue: ProjectLoki) {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
@@ -107,47 +118,30 @@ export async function upsertGitlabConfig(params: BaseParams, keycloakRootGroupPa
 
   // Récupérer ou créer le fichier values.yaml
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
+  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
-  const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
-  const tenantRbac = [`${keycloakRootGroupPath}/grafana/${params.stage}-RW`, `${keycloakRootGroupPath}/grafana/${params.stage}-RO`]
+  const projects = yamlFile.global?.projects || {}
+  projects[project.id] = projectValue
+  const yamlString = writeYamlFile({
+    ...yamlFile,
+    global: {
+      ...yamlFile.global,
+      projects,
+    },
+  })
 
-  // const infraReposUrls: string[] = []
-  // for (const repo of project.repositories) {
-  //   if (repo.isInfra) {
-  //     const repoInternalUrl = (await vaultApi.read(`${params.organizationName}/${params.projectName}/${repo.internalRepoName}-mirror`)).data.GIT_OUTPUT_URL as string
-  //     if (repoInternalUrl) {
-  //       infraReposUrls.push(`https://${repoInternalUrl}`)
-  //     }
-  //   }
-  // }
-
-  const projectData: ProjectLoki = {
-    name: tenantName,
-    groups: tenantRbac,
-    uuid: project.id,
-    // urls: infraReposUrls,
-  }
-
-  if (findTenantByName(yamlFile, tenantName)) {
-    return
-  }
-
-  // Modifier le fichier YAML et commiter
-  yamlFile = addYamlObjectToRepo(yamlFile, projectData)
-  const yamlString = writeYamlFile(yamlFile)
-
-  return commitAndPushYamlFile(
+  await commitAndPushYamlFile(
     gitlabApi,
     gitlabLokiRepo,
     valuesPath,
     valuesBranch,
-    `Add project ${project.name}`,
+    `Update project ${project.slug}`,
     yamlString,
   )
+  return `Update: ${project.slug}`
 }
 
-export async function deleteGitlabYamlConfig(params: BaseParams, project: Project, gitlabApi: GitlabInterface) {
+export async function deleteGitlabYamlConfig(project: Project, gitlabApi: GitlabInterface) {
   // Même logique de groupe et de repo que pour l'upsert
   const lokiGroupName = 'observability'
   const lokiRepoName = 'observability'
@@ -156,19 +150,16 @@ export async function deleteGitlabYamlConfig(params: BaseParams, project: Projec
 
   // Récupérer le fichier values.yaml
   const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  let yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
-
-  const tenantName = `${params.stage}-${params.organizationName}-${params.projectName}`
+  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
 
   // Rechercher le projet à supprimer
-  const projectToDelete = yamlFile.global.tenants.find(tenant => tenant.name === tenantName)
-  if (!projectToDelete) {
+  if (yamlFile.global?.projects && !(project.id in yamlFile.global.projects)) {
     return
   }
 
   // Modifier le fichier YAML et commiter
-  yamlFile = removeRepo(yamlFile, projectToDelete.uuid)
-  const yamlString = writeYamlFile(yamlFile)
+  const yamlFileStripped = removeProject(yamlFile, project.id)
+  const yamlString = writeYamlFile(yamlFileStripped)
 
   return commitAndPushYamlFile(
     gitlabApi,
@@ -180,26 +171,38 @@ export async function deleteGitlabYamlConfig(params: BaseParams, project: Projec
   )
 }
 
-function addYamlObjectToRepo(data: YamlLokiData, newProject: ProjectLoki): YamlLokiData {
-  return {
-    ...data,
-    global: {
-      ...data.global,
-      tenants: [...data.global.tenants, newProject],
-    },
-  }
+function removeProject(data: YamlLokiData, uuid: string): YamlLokiData {
+  const strippedData = structuredClone(data)
+  delete strippedData.global?.projects?.[uuid]
+  return strippedData
 }
 
-function findTenantByName(data: YamlLokiData, name: string): ProjectLoki | undefined {
-  return data.global.tenants.find(tenant => tenant.name === name)
-}
+// function _doesValuesDiff(actuaValues: ProjectLoki, expectedValue: ProjectLoki): boolean {
+//   if (actuaValues.projectName !== expectedValue.projectName)
+//     return true
 
-function removeRepo(data: YamlLokiData, uuid: string): YamlLokiData {
-  return {
-    ...data,
-    global: {
-      ...data.global,
-      tenants: data.global.tenants.filter(tenant => tenant.uuid !== uuid),
-    },
-  }
-}
+//   const actualEnvKeys = Object.entries(actuaValues.envs) as [['prod' | 'hprod', Env] ]
+//   if (actualEnvKeys.length !== Object.keys(expectedValue.envs).length)
+//     return true
+
+//   for (const [envName, envValue] of actualEnvKeys) {
+//     if (!(envName in expectedValue.envs))
+//       return true
+
+//     if (!envValue.groups) return true
+//     if (!expectedValue.envs[envName]?.groups) return true
+
+//     if (envValue.groups.toString() !== expectedValue.envs[envName]?.groups.toString())
+//       return true
+
+//     const envTenants = Object.keys(envValue.tenants)
+//     if (envTenants.length !== Object.keys(expectedValue.envs[envName]?.tenants ?? {}).length)
+//       return true
+
+//     for (const tenantName of envTenants) {
+//       if (expectedValue.envs[envName] && !(tenantName in expectedValue.envs[envName].tenants))
+//         return true
+//     }
+//   }
+//   return false
+// }

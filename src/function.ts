@@ -1,13 +1,19 @@
-import type { Environment, Project, StepCall, UserObject } from '@cpn-console/hooks'
+import type { Environment, PluginResult, Project, StepCall, UserObject } from '@cpn-console/hooks'
+import type { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
 import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
-import type { BaseParams, Stage } from './utils.js'
-import { parseError } from '@cpn-console/hooks'
-import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
+import { parseError, specificallyDisabled } from '@cpn-console/hooks'
+import { compressUUID, removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
 import { Gitlab } from '@gitbeaker/rest'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
-import { deleteGitlabYamlConfig, upsertGitlabConfig } from './yaml.js'
+import { isNewNsName } from './utils.js'
+import { deleteGitlabYamlConfig, type ProjectLoki, type Type, upsertGitlabConfig } from './yaml.js'
 
-const getBaseParams = (project: Project, stage: Stage): BaseParams => ({ organizationName: project.organization.name, projectName: project.name, stage })
+const okSkipped: PluginResult = {
+  status: {
+    result: 'OK',
+    message: 'Plugin disabled',
+  },
+}
 
 export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
 
@@ -58,35 +64,67 @@ function getGitlabApi(): GitlabInterface {
 
 export const upsertProject: StepCall<Project> = async (payload) => {
   try {
+    if (specificallyDisabled(payload.config.observability?.enabled)) {
+      return okSkipped
+    }
     // init args
     const project = payload.args
-    const keycloakApi = payload.apis.keycloak
-    const vaultApi = payload.apis.vault
+    const keycloakApi = payload.apis.keycloak as KeycloakProjectApi
     // init gitlab api
     const gitlabApi = getGitlabApi()
     const keycloakRootGroupPath = await keycloakApi.getProjectGroupPath()
+    const tenantRbacProd = [`${keycloakRootGroupPath}/grafana/prod-RW`, `${keycloakRootGroupPath}/grafana/prod-RO`]
+    const tenantRbacHProd = [`${keycloakRootGroupPath}/grafana/hprod-RW`, `${keycloakRootGroupPath}/grafana/hprod-RO`]
 
-    const hasProd = project.environments.find(env => env.stage === 'prod')
-    const hasNonProd = project.environments.find(env => env.stage !== 'prod')
-    const hProdParams = getBaseParams(project, 'hprod')
-    const prodParams = getBaseParams(project, 'prod')
+    const compressedUUID = compressUUID(project.id)
+
+    const projectValue: ProjectLoki = {
+      projectName: project.slug,
+      envs: {
+        hprod: {
+          groups: tenantRbacHProd,
+          tenants: {},
+        },
+        prod: {
+          groups: tenantRbacProd,
+          tenants: {},
+        },
+      },
+    }
+
+    for (const environment of payload.args.environments) {
+      if (!environment.apis.kubernetes) {
+        throw new Error(`no kubernetes apis on environment ${environment.name}`)
+      }
+      const namespace = await environment.apis.kubernetes.getNsName()
+      const name = isNewNsName(namespace) ? compressedUUID : project.slug
+      console.log({ namespace, name })
+      const env: Type = environment.stage === 'prod' ? 'prod' : 'hprod'
+      projectValue.envs[env].tenants[`${env}-${name}`] = {}
+    }
+
+    if (projectValue.envs.hprod && !Object.values(projectValue.envs.hprod?.tenants).length) {
+      // @ts-ignore
+      delete projectValue.envs.hprod
+    }
+    if (projectValue.envs.prod && !Object.values(projectValue.envs.prod?.tenants).length) {
+      // @ts-ignore
+      delete projectValue.envs.prod
+    }
+
     const listPerms = getListPrems(project.environments)
 
-    await Promise.all([
-      ensureKeycloakGroups(listPerms, keycloakApi),
-      // Upsert or delete Gitlab config based on prod/non-prod environment
-      ...(hasProd
-        ? [await upsertGitlabConfig(prodParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
-        : [await deleteGitlabYamlConfig(prodParams, project, gitlabApi)]),
-      ...(hasNonProd
-        ? [await upsertGitlabConfig(hProdParams, keycloakRootGroupPath, project, gitlabApi, vaultApi)]
-        : [await deleteGitlabYamlConfig(hProdParams, project, gitlabApi)]),
-    ])
+    // Upsert or delete Gitlab config based on prod/non-prod environment
+    const yamlResult = await upsertGitlabConfig(project, gitlabApi, projectValue)
+    await ensureKeycloakGroups(listPerms, keycloakApi)
 
     return {
       status: {
         result: 'OK',
-        message: 'Created',
+        message: yamlResult,
+      },
+      store: {
+        instances: Object.keys(projectValue.envs).join(','),
       },
     }
   } catch (error) {
@@ -102,16 +140,16 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 
 export const deleteProject: StepCall<Project> = async (payload) => {
   try {
+    if (specificallyDisabled(payload.config.observability?.enabled)) {
+      return okSkipped
+    }
     const project = payload.args
     const gitlabApi = getGitlabApi()
-    const keycloakApi = payload.apis.keycloak
-    const hProdParams = getBaseParams(project, 'hprod')
-    const prodParams = getBaseParams(project, 'prod')
+    const keycloakApi = payload.apis.keycloak as KeycloakProjectApi
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      deleteGitlabYamlConfig(prodParams, project, gitlabApi),
-      deleteGitlabYamlConfig(hProdParams, project, gitlabApi),
+      deleteGitlabYamlConfig(project, gitlabApi),
     ])
 
     return {

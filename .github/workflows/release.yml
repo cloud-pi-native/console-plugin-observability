@@ -39,7 +39,7 @@ jobs:
         run: rm -rf ./node_modules && npm install --ignore-scripts --omit=dev
 
       - name: Zip build folder
-        run: zip -r ./package.zip ./package.json ./dist ./node_modules
+        run: zip -r ./package.zip ./package.json ./dist ./node_modules ./files
 
       - name: Upload release artifact
         uses: actions/upload-release-asset@v1
