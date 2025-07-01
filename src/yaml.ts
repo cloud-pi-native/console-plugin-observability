@@ -1,5 +1,5 @@
 import type { Project } from '@cpn-console/hooks'
-import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
+import type { Gitlab as GitlabInterface, ProjectSchema } from '@gitbeaker/core'
 import type {
   Project as GitlabProject,
   Group,
@@ -8,38 +8,35 @@ import type {
 import yaml from 'js-yaml'
 import {
   commitAndPushYamlFile,
-  createGroup,
-  createProject,
-  findGroup,
-  findProject,
   getGitlabYamlFileContent,
 } from './gitlab.js'
 
 const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
+const groupName = 'observability'
+const repoName = 'observability'
 
-export type Type = 'prod' | 'hprod'
+export type EnvType = 'prod' | 'hprod'
 interface Tenant {}
 
 interface Env {
   groups?: string[]
   tenants: {
-    [x: `${Type}-${string}`]: Tenant
+    [x: `${EnvType}-${string}`]: Tenant
   }
 }
-export interface ProjectLoki {
+export interface ObservabilityProject {
   projectName: string // slug
   envs: {
     prod: Env
     hprod: Env
   }
-  // urls: string[]
 }
 
-interface YamlLokiData {
-  global?: {
-    projects?: {
-      [x: string]: ProjectLoki
+interface ObservabilityData {
+  global: {
+    projects: {
+      [x: string]: ObservabilityProject
     }
   }
 }
@@ -64,15 +61,22 @@ export function writeYamlFile(data: object): string {
 }
 
 async function findOrCreateGroup(gitlabApi: GitlabInterface, groupName: string) {
-  const group = await findGroup(gitlabApi, groupName)
-  return group ?? await createGroup(gitlabApi, groupName)
+  const groups = await gitlabApi.Groups.search(groupName)
+  const group = groups.find(g => g.full_path === groupName || g.name === groupName)
+  return group ?? await gitlabApi.Groups.create(groupName, groupName)
 }
 
 async function findOrCreateRepo(gitlabApi: GitlabInterface, group: Group, repoName: string): Promise<GitlabProject> {
   try {
-    const repo = await findProject(gitlabApi, group, repoName)
+    const projects: ProjectSchema[] = await gitlabApi.Groups.allProjects(group.id)
+    const repo = projects.find(p => p.name === repoName)
     if (!repo) {
-      return await createProject(gitlabApi, group, repoName, 'Repo for obervatorium values, managed by DSO console')
+      return gitlabApi.Projects.create({
+        name: repoName,
+        path: repoName,
+        namespaceId: group.id,
+        description: 'Repo for Observatorium values, managed by DSO console',
+      })
     }
     return repo
   } catch (error) {
@@ -109,16 +113,14 @@ async function findOrCreateValuesFile(gitlabApi: GitlabInterface, project: Gitla
   }
 }
 
-export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, projectValue: ProjectLoki) {
+export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInterface, projectValue: ObservabilityProject) {
   // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
-  const lokiGroupName = 'observability'
-  const lokiRepoName = 'observability'
-  const gitlabLokiGroup = await findOrCreateGroup(gitlabApi, lokiGroupName)
-  const gitlabLokiRepo = await findOrCreateRepo(gitlabApi, gitlabLokiGroup, lokiRepoName)
+  const gitlabGroup = await findOrCreateGroup(gitlabApi, groupName)
+  const gitlabRepo = await findOrCreateRepo(gitlabApi, gitlabGroup, repoName)
 
   // Récupérer ou créer le fichier values.yaml
-  const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
+  const file = await findOrCreateValuesFile(gitlabApi, gitlabRepo)
+  const yamlFile = await yaml.load(Buffer.from(file, 'utf-8').toString('utf-8')) as ObservabilityData
 
   const projects = yamlFile.global?.projects || {}
 
@@ -138,7 +140,7 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
 
   await commitAndPushYamlFile(
     gitlabApi,
-    gitlabLokiRepo,
+    gitlabRepo,
     valuesPath,
     valuesBranch,
     `Update project ${project.slug}`,
@@ -147,16 +149,14 @@ export async function upsertGitlabConfig(project: Project, gitlabApi: GitlabInte
   return `Update: ${project.slug}`
 }
 
-export async function deleteGitlabYamlConfig(project: Project, gitlabApi: GitlabInterface) {
+export async function deleteProjectConfig(project: Project, gitlabApi: GitlabInterface) {
   // Même logique de groupe et de repo que pour l'upsert
-  const lokiGroupName = 'observability'
-  const lokiRepoName = 'observability'
-  const gitlabLokiGroup = await findOrCreateGroup(gitlabApi, lokiGroupName)
-  const gitlabLokiRepo = await findOrCreateRepo(gitlabApi, gitlabLokiGroup, lokiRepoName)
+  const gitlabGroup = await findOrCreateGroup(gitlabApi, groupName)
+  const gitlabRepo = await findOrCreateRepo(gitlabApi, gitlabGroup, repoName)
 
   // Récupérer le fichier values.yaml
-  const file = await findOrCreateValuesFile(gitlabApi, gitlabLokiRepo)
-  const yamlFile = await readYamlFile<YamlLokiData>(Buffer.from(file, 'utf-8').toString('utf-8'))
+  const file = await findOrCreateValuesFile(gitlabApi, gitlabRepo)
+  const yamlFile = await yaml.load(Buffer.from(file, 'utf-8').toString('utf-8')) as ObservabilityData
 
   // Rechercher le projet à supprimer
   if (yamlFile.global?.projects && !(project.id in yamlFile.global.projects)) {
@@ -169,7 +169,7 @@ export async function deleteGitlabYamlConfig(project: Project, gitlabApi: Gitlab
 
   return commitAndPushYamlFile(
     gitlabApi,
-    gitlabLokiRepo,
+    gitlabRepo,
     valuesPath,
     valuesBranch,
     `Delete project ${project.name}`,
@@ -177,38 +177,8 @@ export async function deleteGitlabYamlConfig(project: Project, gitlabApi: Gitlab
   )
 }
 
-function removeProject(data: YamlLokiData, uuid: string): YamlLokiData {
+function removeProject(data: ObservabilityData, uuid: string): ObservabilityData {
   const strippedData = structuredClone(data)
   delete strippedData.global?.projects?.[uuid]
   return strippedData
 }
-
-// function _doesValuesDiff(actuaValues: ProjectLoki, expectedValue: ProjectLoki): boolean {
-//   if (actuaValues.projectName !== expectedValue.projectName)
-//     return true
-
-//   const actualEnvKeys = Object.entries(actuaValues.envs) as [['prod' | 'hprod', Env] ]
-//   if (actualEnvKeys.length !== Object.keys(expectedValue.envs).length)
-//     return true
-
-//   for (const [envName, envValue] of actualEnvKeys) {
-//     if (!(envName in expectedValue.envs))
-//       return true
-
-//     if (!envValue.groups) return true
-//     if (!expectedValue.envs[envName]?.groups) return true
-
-//     if (envValue.groups.toString() !== expectedValue.envs[envName]?.groups.toString())
-//       return true
-
-//     const envTenants = Object.keys(envValue.tenants)
-//     if (envTenants.length !== Object.keys(expectedValue.envs[envName]?.tenants ?? {}).length)
-//       return true
-
-//     for (const tenantName of envTenants) {
-//       if (expectedValue.envs[envName] && !(tenantName in expectedValue.envs[envName].tenants))
-//         return true
-//     }
-//   }
-//   return false
-// }

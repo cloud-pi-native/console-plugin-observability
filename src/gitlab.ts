@@ -18,23 +18,10 @@ export async function findGroup(api: IGitlab, groupName: string): Promise<Group 
   return groups.find(g => g.full_path === groupName || g.name === groupName)
 }
 
-export async function createGroup(api: IGitlab, groupName: string): Promise<Group> {
-  return await api.Groups.create(groupName, groupName)
-}
-
 export async function findProject(api: IGitlab, group: Group, projectName: string): Promise<Project | undefined> {
   const projects: Project [] = await api.Groups.allProjects(group.id)
   const project = projects.find(p => p.name === projectName)
   return project
-}
-
-export async function createProject(api: IGitlab, group: Group, projectName: string, description: string): Promise<Project> {
-  return await api.Projects.create({
-    name: projectName,
-    path: projectName,
-    namespaceId: group.id,
-    description,
-  })
 }
 
 export async function fileExistsInRepo(api: IGitlab, project: Project, filePath: string, branch: string): Promise<boolean> {

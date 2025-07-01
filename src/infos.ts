@@ -44,7 +44,7 @@ const infos = {
   },
   title: 'Grafana',
   imgSrc: `data:image/png;base64,${imageData}`,
-  description: 'Grafana est un outil de métrique et de logs',
+  description: 'Grafana est un outil de visualisation de métriques et de logs',
   config: {
     global: [{
       kind: 'switch',

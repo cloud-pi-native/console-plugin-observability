@@ -6,7 +6,7 @@ import { compressUUID, removeTrailingSlash, requiredEnv } from '@cpn-console/sha
 import { Gitlab } from '@gitbeaker/rest'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
 import { isNewNsName } from './utils.js'
-import { deleteGitlabYamlConfig, type ProjectLoki, type Type, upsertGitlabConfig } from './yaml.js'
+import { deleteProjectConfig, type EnvType, type ObservabilityProject, upsertGitlabConfig } from './yaml.js'
 
 const okSkipped: PluginResult = {
   status: {
@@ -17,7 +17,7 @@ const okSkipped: PluginResult = {
 
 export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
 
-function getListPrems(environments: Environment[]): ListPerms {
+function getListPerms(environments: Environment[]): ListPerms {
   const allProdPerms = environments
     .filter(env => env.stage === 'prod')
     .map(env => env.permissions)
@@ -78,7 +78,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
 
     const compressedUUID = compressUUID(project.id)
 
-    const projectValue: ProjectLoki = {
+    const projectValue: ObservabilityProject = {
       projectName: project.slug,
       envs: {
         hprod: {
@@ -99,11 +99,11 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       const namespace = await environment.apis.kubernetes.getNsName()
       const name = isNewNsName(namespace) ? compressedUUID : project.slug
       console.log({ namespace, name })
-      const env: Type = environment.stage === 'prod' ? 'prod' : 'hprod'
+      const env: EnvType = environment.stage === 'prod' ? 'prod' : 'hprod'
       projectValue.envs[env].tenants[`${env}-${name}`] = {}
     }
 
-    if (projectValue.envs.hprod && !Object.values(projectValue.envs.hprod?.tenants).length) {
+    if (projectValue.envs.hprod && !Object.values(projectValue.envs.hprod.tenants).length) {
       // @ts-ignore
       delete projectValue.envs.hprod
     }
@@ -112,7 +112,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       delete projectValue.envs.prod
     }
 
-    const listPerms = getListPrems(project.environments)
+    const listPerms = getListPerms(project.environments)
 
     // Upsert or delete Gitlab config based on prod/non-prod environment
     const yamlResult = await upsertGitlabConfig(project, gitlabApi, projectValue)
@@ -131,7 +131,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     return {
       status: {
         result: 'KO',
-        message: 'An error happened while creating Kibana resources',
+        message: 'An error happened while creating Observability resources',
       },
       error: parseError(error),
     }
@@ -149,7 +149,7 @@ export const deleteProject: StepCall<Project> = async (payload) => {
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      deleteGitlabYamlConfig(project, gitlabApi),
+      deleteProjectConfig(project, gitlabApi),
     ])
 
     return {
