@@ -1,12 +1,9 @@
 import type { Environment, PluginResult, Project, StepCall, UserObject } from '@cpn-console/hooks'
 import type { KeycloakProjectApi } from '@cpn-console/keycloak-plugin/types/class.js'
-import type { Gitlab as GitlabInterface } from '@gitbeaker/core'
 import { parseError, specificallyDisabled } from '@cpn-console/hooks'
-import { compressUUID, removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
-import { Gitlab } from '@gitbeaker/rest'
+import { compressUUID } from '@cpn-console/shared'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
-import { isNewNsName } from './utils.js'
-import { deleteProjectConfig, type EnvType, type ObservabilityProject, upsertGitlabConfig } from './yaml.js'
+import { type EnvType, type ObservabilityProject, ObservabilityRepoManager } from './observability-repo-manager.js'
 
 const okSkipped: PluginResult = {
   status: {
@@ -16,6 +13,11 @@ const okSkipped: PluginResult = {
 }
 
 export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
+
+const re = /[a-z0-9]{25}--[a-z0-9]{25}/
+function isNewNsName(ns: string) {
+  return re.test(ns)
+}
 
 function getListPerms(environments: Environment[]): ListPerms {
   const allProdPerms = environments
@@ -56,12 +58,6 @@ function getListPerms(environments: Environment[]): ListPerms {
   return listPerms
 }
 
-function getGitlabApi(): GitlabInterface {
-  const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_URL'))
-  const gitlabToken = requiredEnv('GITLAB_TOKEN')
-  return new Gitlab({ token: gitlabToken, host: gitlabUrl })
-}
-
 export const upsertProject: StepCall<Project> = async (payload) => {
   try {
     if (specificallyDisabled(payload.config.observability?.enabled)) {
@@ -70,8 +66,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     // init args
     const project = payload.args
     const keycloakApi = payload.apis.keycloak as KeycloakProjectApi
-    // init gitlab api
-    const gitlabApi = getGitlabApi()
+
     const keycloakRootGroupPath = await keycloakApi.getProjectGroupPath()
     const tenantRbacProd = [`${keycloakRootGroupPath}/grafana/prod-RW`, `${keycloakRootGroupPath}/grafana/prod-RO`]
     const tenantRbacHProd = [`${keycloakRootGroupPath}/grafana/hprod-RW`, `${keycloakRootGroupPath}/grafana/hprod-RO`]
@@ -115,7 +110,9 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     const listPerms = getListPerms(project.environments)
 
     // Upsert or delete Gitlab config based on prod/non-prod environment
-    const yamlResult = await upsertGitlabConfig(project, gitlabApi, projectValue)
+    const observabilityRepoManager = new ObservabilityRepoManager()
+    const yamlResult = await observabilityRepoManager.updateProjectConfig(project, projectValue)
+
     await ensureKeycloakGroups(listPerms, keycloakApi)
 
     return {
@@ -144,12 +141,12 @@ export const deleteProject: StepCall<Project> = async (payload) => {
       return okSkipped
     }
     const project = payload.args
-    const gitlabApi = getGitlabApi()
     const keycloakApi = payload.apis.keycloak as KeycloakProjectApi
+    const observabilityRepoManager = new ObservabilityRepoManager()
 
     await Promise.all([
       deleteKeycloakGroup(keycloakApi),
-      deleteProjectConfig(project, gitlabApi),
+      observabilityRepoManager.deleteProjectConfig(project),
     ])
 
     return {
