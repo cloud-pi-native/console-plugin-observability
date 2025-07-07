@@ -1,12 +1,31 @@
+import type { GitlabProjectApi } from '@cpn-console/gitlab-plugin/types/class.js'
 import type { Project } from '@cpn-console/hooks'
+import type { Gitlab as IGitlab, ProjectSchema } from '@gitbeaker/core'
 import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
-import { Gitlab, type ProjectSchema } from '@gitbeaker/core'
+import { Gitlab } from '@gitbeaker/rest'
 import yaml from 'js-yaml'
 
 const valuesPath = 'helm/values.yaml'
 const valuesBranch = 'main'
 const groupName = 'observability'
 const repoName = 'observability'
+export const observabilityRepository = 'infra-observability'
+const observabilityChartVersion = requiredEnv('DSO_OBSERVABILITY_CHART_VERSION')
+const observabilityChartContent = `
+apiVersion: v2
+name: dso-observability
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+dependencies:
+  - name: charts/dso-observability
+    version: ${observabilityChartVersion}
+    repository: https://cloud-pi-native.github.io/helm-charts/
+`
+const observabilityTemplateContent = `
+{{- include "grafana-dashboards.dashboards" . -}}
+{{- include "grafana-dashboards.rules" . -}}
+`
 
 export type EnvType = 'prod' | 'hprod'
 interface Tenant {}
@@ -19,6 +38,10 @@ interface Env {
 }
 export interface ObservabilityProject {
   projectName: string // slug
+  projectRepository: {
+    url: string
+    path: string
+  }
   envs: {
     prod: Env
     hprod: Env
@@ -39,12 +62,14 @@ const yamlInitData = `
   `
 
 export class ObservabilityRepoManager {
-  private gitlabApi: Gitlab
+  private gitlabApi: IGitlab
+  private gitlabProjectApi: GitlabProjectApi
 
-  constructor() {
+  constructor(gitlabProjectApi: GitlabProjectApi) {
     const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_URL'))
     const gitlabToken = requiredEnv('GITLAB_TOKEN')
     this.gitlabApi = new Gitlab({ token: gitlabToken, host: gitlabUrl })
+    this.gitlabProjectApi = gitlabProjectApi
   }
 
   private async findOrCreateRepo(): Promise<ProjectSchema> {
@@ -52,7 +77,7 @@ export class ObservabilityRepoManager {
       // Find or create parent Gitlab group
       const groups = await this.gitlabApi.Groups.search(groupName)
       let group = groups.find(g => g.full_path === groupName || g.name === groupName)
-      if(!group) {
+      if (!group) {
         group = await this.gitlabApi.Groups.create(groupName, groupName)
       }
       // Find or create parent Gitlab repository
@@ -119,16 +144,33 @@ export class ObservabilityRepoManager {
   }
 
   public async updateProjectConfig(project: Project, projectValue: ObservabilityProject): Promise<string> {
-    // Déplacer toute la logique de création ou de récupération de groupe et de repo ici
+    // Repository created during 'pre' step if needed
+    const projectId = await this.gitlabProjectApi.getProjectId(observabilityRepository)
+    const observabilityProjectRepository = await this.gitlabProjectApi.getProjectById(projectId)
+
+    // Add or update chart files
+    const chartUpdated = await this.gitlabProjectApi.commitCreateOrUpdate(
+      observabilityProjectRepository.id,
+      observabilityChartContent,
+      'Chart.yaml',
+    )
+    const templateUpdated = await this.gitlabProjectApi.commitCreateOrUpdate(
+      observabilityProjectRepository.id,
+      observabilityTemplateContent,
+      'templates/includes.yaml',
+    )
+
+    // Dépôt d'infra scruté par ArgoCD (charts dso-grafana et dso-observatorium)
     const gitlabRepo = await this.findOrCreateRepo()
 
     // Récupérer le fichier values.yaml
-    const yamlFile = await this.getValuesFile(gitlabRepo) 
+    const yamlFile = await this.getValuesFile(gitlabRepo)
       || yaml.load(Buffer.from(yamlInitData, 'base64').toString('utf-8')) as ObservabilityData
 
     const projects = yamlFile.global?.projects || {}
 
-    if (JSON.stringify(projects[project.id]) === JSON.stringify(projectValue)) {
+    if (!chartUpdated && !templateUpdated
+      && JSON.stringify(projects[project.id]) === JSON.stringify(projectValue)) {
       return 'Already up-to-date'
     }
 
