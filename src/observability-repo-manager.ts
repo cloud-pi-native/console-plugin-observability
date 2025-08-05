@@ -50,16 +50,20 @@ export interface ObservabilityProject {
 
 interface ObservabilityData {
   global: {
-    projects: {
+    tenants?: {
+      [x: string]: Tenant
+    }
+    projects?: {
       [x: string]: ObservabilityProject
     }
   }
 }
 
-const yamlInitData = `
-  global:
-    tenants: []
-  `
+const yamlInitData: ObservabilityData = {
+  global: {
+    tenants: {},
+  },
+}
 
 export class ObservabilityRepoManager {
   private gitlabApi: IGitlab
@@ -165,7 +169,7 @@ export class ObservabilityRepoManager {
 
     // Récupérer le fichier values.yaml
     const yamlFile = await this.getValuesFile(gitlabRepo)
-      || yaml.load(Buffer.from(yamlInitData, 'base64').toString('utf-8')) as ObservabilityData
+      || yamlInitData
 
     const projects = yamlFile.global?.projects || {}
 
