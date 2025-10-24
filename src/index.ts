@@ -18,7 +18,7 @@ export const plugin: Plugin = {
       },
     },
   },
-  start: () => { requiredEnv('GRAFANA_URL') && requiredEnv('DSO_OBSERVABILITY_CHART_VERSION') }, // to check is the variable is set, unless it crashes the app
+  start: () => { requiredEnv('GRAFANA_DOMAIN') && requiredEnv('DSO_OBSERVABILITY_CHART_VERSION') }, // to check is the variable is set, unless it crashes the app
 }
 
 declare module '@cpn-console/hooks' {

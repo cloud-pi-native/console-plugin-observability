@@ -15,7 +15,7 @@ const infos = {
       id: '',
       slug: '',
     }
-    const grafanaUrl = getConfig().grafanaUrl
+    const grafanaDomain = getConfig().grafanaDomain
     if (typeof project === 'string' && typeof organization === 'string') {
       params.id = projectId
       params.slug = `${organization}-${project}`
@@ -28,14 +28,14 @@ const infos = {
     const instances = store.observability?.instances?.split(',') ?? []
     if (instances.includes('hprod')) {
       urls.push({
-        to: `${grafanaUrl}/hprod-${params.slug}`,
+        to: `http://hprod-${params.slug}-grafana-service.${grafanaDomain}`,
         title: isInfV9 ? 'Hors production' : undefined,
         description: 'Hors production',
       })
     }
     if (instances.includes('prod')) {
       urls.push({
-        to: `${grafanaUrl}/prod-${params.slug}`,
+        to: `http://prod-${params.slug}-grafana-service.${grafanaDomain}`,
         title: isInfV9 ? 'Production' : undefined,
         description: 'Production',
       })

@@ -8,5 +8,5 @@ Il permet :
 ## Usage
 
 Les variables d'environnement suivantes doivent être définies :
-- `GRAFANA_URL` : l'URL racine à utiliser pour accéder aux instances déployées pour chaque projet
+- `GRAFANA_DOMAIN` : nom de domaine interne du namespace Kubernetes hébergeant les instances Grafana, incluant le port `3000` (ex:  `dso-grafana.svc.cluster.local:3000`).
 - `DSO_OBSERVABILITY_CHART_VERSION` : la version du Chart dso-observability à utiliser dans les dépôts de dashboards et alertes projet.
