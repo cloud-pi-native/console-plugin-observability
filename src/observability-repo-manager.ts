@@ -70,7 +70,7 @@ export class ObservabilityRepoManager {
   private gitlabProjectApi: GitlabProjectApi
 
   constructor(gitlabProjectApi: GitlabProjectApi) {
-    const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_URL'))
+    const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_INTERNAL_URL'))
     const gitlabToken = requiredEnv('GITLAB_TOKEN')
     this.gitlabApi = new Gitlab({ token: gitlabToken, host: gitlabUrl })
     this.gitlabProjectApi = gitlabProjectApi
