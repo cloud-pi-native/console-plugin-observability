@@ -19,7 +19,7 @@ version: 0.1.0
 appVersion: "0.0.1"
 dependencies:
   - name: dso-observability
-    version: ${observabilityChartVersion}
+    version: "${observabilityChartVersion}"
     repository: https://cloud-pi-native.github.io/helm-charts/
 `
 const observabilityTemplateContent = `
