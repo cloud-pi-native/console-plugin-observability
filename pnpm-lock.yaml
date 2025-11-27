@@ -43,8 +43,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@cpn-console/gitlab-plugin':
-        specifier: ^3.3.0
-        version: 3.3.0(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))
+        specifier: ^3.3.1
+        version: 3.3.1(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))
       '@cpn-console/keycloak-plugin':
         specifier: ^2.1.0
         version: 2.1.0(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))
@@ -169,8 +169,8 @@ packages:
   '@cpn-console/eslint-config@1.0.2':
     resolution: {integrity: sha512-AtIebnifehaO+WX1SQwRXiuSrwmuWfC0jWxfmIqCdt0WitQ+qrdwxsgUj58tccmdnulzGUYsFavXnjiOt6JKYg==}
 
-  '@cpn-console/gitlab-plugin@3.3.0':
-    resolution: {integrity: sha512-n5L6U9LWJGvqN3hq9Bwu3KIbYshZoreP7i9lYTCJ6LZ7VEedPb9LJYWnMoXvm+zrgYjkryz18P1kAbm1NSVTJQ==}
+  '@cpn-console/gitlab-plugin@3.3.1':
+    resolution: {integrity: sha512-keCsPiBGGHqc+wdHn/vR7Tt8HM0NPWG/52tjacQz4/tkzKNPRMepkIaervhcl8UAUQWv+hNum2oMve5ZYgYyCw==}
 
   '@cpn-console/hooks@3.0.0':
     resolution: {integrity: sha512-D146UvkHGLhHEdCmszq00XXeJBfx8T9pZcoJLx2FiaZyyPuRCXMIN06z9x5NcXz/loWBTvl2gHWpwT9xQk0UjA==}
@@ -979,6 +979,9 @@ packages:
   axios@1.10.0:
     resolution: {integrity: sha512-/1xYAC4MP/HEG+3duIhFr4ZQXR4sQXOIe+o6sdqzeykGLx6Upp/1p8MHqhINOvGeP7xyNHe7tsiJByc4SSVUxw==}
 
+  axios@1.12.2:
+    resolution: {integrity: sha512-vMJzPewAlRyOgxV2dU0Cuz2O8zzzx9VYtbJOaBgXFeLc4IV/Eg50n4LowmehOOR61S8ZMpc2K5Sa7g6A4jfkUw==}
+
   b4a@1.6.7:
     resolution: {integrity: sha512-OnAYlL5b7LEkALw87fUVafQw5rVR9RjwGd4KUwNQ6DrrNmaVaUCgLipfVlzrPQ4tWOR9P0IXGNOx50jYCCdSJg==}
 
@@ -1553,6 +1556,10 @@ packages:
 
   form-data@4.0.3:
     resolution: {integrity: sha512-qsITQPfmvMOSAdeyZ+12I1c+CKSstAFAwu+97zrnWAbIr5u8wfsExUzCesVLC8NgHuRUqNN4Zy6UPWUTRGslcA==}
+    engines: {node: '>= 6'}
+
+  form-data@4.0.5:
+    resolution: {integrity: sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==}
     engines: {node: '>= 6'}
 
   format@0.2.2:
@@ -2921,7 +2928,7 @@ snapshots:
 
   '@cpn-console/eslint-config@1.0.2': {}
 
-  '@cpn-console/gitlab-plugin@3.3.0(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))':
+  '@cpn-console/gitlab-plugin@3.3.1(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))':
     dependencies:
       '@cpn-console/hooks': 4.0.0(@types/node@22.15.34)(typescript@5.8.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.15.34)(yaml@2.8.0))
       '@cpn-console/shared': 1.3.0(@types/node@22.15.34)
@@ -2929,7 +2936,7 @@ snapshots:
       '@gitbeaker/core': 40.6.0
       '@gitbeaker/requester-utils': 40.6.0
       '@gitbeaker/rest': 40.6.0
-      axios: 1.10.0
+      axios: 1.12.2
       js-yaml: 4.1.0
     transitivePeerDependencies:
       - '@types/node'
@@ -3775,6 +3782,14 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
+  axios@1.12.2:
+    dependencies:
+      follow-redirects: 1.15.9
+      form-data: 4.0.5
+      proxy-from-env: 1.1.0
+    transitivePeerDependencies:
+      - debug
+
   b4a@1.6.7: {}
 
   balanced-match@1.0.2: {}
@@ -4414,6 +4429,14 @@ snapshots:
       mime-types: 2.1.35
 
   form-data@4.0.3:
+    dependencies:
+      asynckit: 0.4.0
+      combined-stream: 1.0.8
+      es-set-tostringtag: 2.1.0
+      hasown: 2.0.2
+      mime-types: 2.1.35
+
+  form-data@4.0.5:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
