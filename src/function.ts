@@ -95,7 +95,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     const projectValue: ObservabilityProject = {
       projectName: project.slug,
       projectRepository: {
-        url: await gitlabApi.getRepoUrl(observabilityRepository),
+        url: await gitlabApi.getPublicRepoUrl(observabilityRepository),
         path: '.',
       },
       envs: {
