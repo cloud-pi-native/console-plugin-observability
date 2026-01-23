@@ -2,6 +2,7 @@ import type { GitlabProjectApi } from '@cpn-console/gitlab-plugin/types/class.js
 import type { Project } from '@cpn-console/hooks'
 import type { Gitlab as IGitlab, ProjectSchema } from '@gitbeaker/core'
 import { removeTrailingSlash, requiredEnv } from '@cpn-console/shared'
+import { GitbeakerRequestError } from '@gitbeaker/requester-utils'
 import { Gitlab } from '@gitbeaker/rest'
 import yaml from 'js-yaml'
 
@@ -108,8 +109,10 @@ export class ObservabilityRepoManager {
       const file = await this.gitlabApi.RepositoryFiles.show(project.id, valuesPath, valuesBranch)
       return yaml.load(Buffer.from(file.content, 'base64').toString('utf-8')) as ObservabilityData
     } catch (error) {
-      console.log(error)
-      return null
+      if (error instanceof GitbeakerRequestError && error.cause?.response.status === 404) {
+        return null
+      }
+      throw error
     }
   }
 
