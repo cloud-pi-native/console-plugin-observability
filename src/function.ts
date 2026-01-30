@@ -15,11 +15,6 @@ const okSkipped: PluginResult = {
 
 export type ListPerms = Record<'prod' | 'hors-prod', Record<'view' | 'edit', UserObject['id'][]>>
 
-const re = /[a-z0-9]{25}--[a-z0-9]{25}/
-function isNewNsName(ns: string) {
-  return re.test(ns)
-}
-
 function getListPerms(environments: Environment[]): ListPerms {
   const allProdPerms = environments
     .filter(env => env.stage === 'prod')
@@ -90,7 +85,7 @@ export const upsertProject: StepCall<Project> = async (payload) => {
     const tenantRbacProd = [`${keycloakRootGroupPath}/grafana/prod-RW`, `${keycloakRootGroupPath}/grafana/prod-RO`]
     const tenantRbacHProd = [`${keycloakRootGroupPath}/grafana/hprod-RW`, `${keycloakRootGroupPath}/grafana/hprod-RO`]
 
-    const compressedUUID = compressUUID(project.id)
+    const tenantId = compressUUID(project.id)
 
     const projectValue: ObservabilityProject = {
       projectName: project.slug,
@@ -114,11 +109,8 @@ export const upsertProject: StepCall<Project> = async (payload) => {
       if (!environment.apis.kubernetes) {
         throw new Error(`no kubernetes apis on environment ${environment.name}`)
       }
-      const namespace = await environment.apis.kubernetes.getNsName()
-      const name = isNewNsName(namespace) ? compressedUUID : project.slug
-      console.log({ namespace, name })
       const env: EnvType = environment.stage === 'prod' ? 'prod' : 'hprod'
-      projectValue.envs[env].tenants[`${env}-${name}`] = {}
+      projectValue.envs[env].tenants[`${env}-${tenantId}`] = {}
     }
 
     if (projectValue.envs.hprod && !Object.values(projectValue.envs.hprod.tenants).length) {
