@@ -154,7 +154,22 @@ export class ObservabilityRepoManager {
       if (error instanceof GitbeakerRequestError && error.cause?.response.status === 404) {
         logger.info({ action: 'commitAndPushYamlFile', projectId: project.id, filePath, branch }, 'Le fichier n\'existe pas')
         // Si le fichier n'existe pas, création
-        await this.gitlabApi.RepositoryFiles.create(project.id, filePath, branch, encodedContent, commitMessage)
+        try {
+          await this.gitlabApi.RepositoryFiles.create(project.id, filePath, branch, encodedContent, commitMessage)
+        } catch (createError) {
+          if (createError instanceof GitbeakerRequestError && createError.cause?.response.status === 400) {
+            // Create a commit for the new file
+            await this.gitlabApi.Commits.create(project.id, branch, commitMessage, [
+              {
+                action: 'create',
+                filePath,
+                content: encodedContent,
+              },
+            ])
+          } else {
+            throw createError
+          }
+        }
         logger.info({ action: 'commitAndPushYamlFile', projectId: project.id, filePath, branch }, 'Fichier YAML créé et poussé')
         return
       }
