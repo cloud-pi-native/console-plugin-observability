@@ -5,6 +5,7 @@ import { okStatus, parseError, specificallyDisabled } from '@cpn-console/hooks'
 import { compressUUID } from '@cpn-console/shared'
 import { deleteKeycloakGroup, ensureKeycloakGroups } from './keycloak.js'
 import { type EnvType, type ObservabilityProject, ObservabilityRepoManager, observabilityRepository } from './observability-repo-manager.js'
+import { sanitizeCause } from './utils.js'
 
 const okSkipped: PluginResult = {
   status: {
@@ -60,7 +61,7 @@ export const ensureProjectRepository: StepCall<Project> = async (payload) => {
   try {
     await gitlabProjectApi.getProjectId(observabilityRepository)
   } catch (e) {
-    console.log('Repository not fond', e)
+    console.log('Repository not found', sanitizeCause(e))
     await gitlabProjectApi.createEmptyProjectRepository({
       repoName: observabilityRepository,
       description: 'Respository for custom Observability infrastructure resources',
