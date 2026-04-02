@@ -57,11 +57,13 @@ function getListPerms(environments: Environment[]): ListPerms {
 
 // Create and update (if needed) the project repository for custom dashboards and alerts
 export const ensureProjectRepository: StepCall<Project> = async (payload) => {
+  console.log('[OBSERVABILITY] ensureProjectRepository')
   const gitlabProjectApi = payload.apis.gitlab as GitlabProjectApi
   try {
+    console.log(`[OBSERVABILITY] Retrieving ${observabilityRepository} repository from Gitlab`)
     await gitlabProjectApi.getProjectId(observabilityRepository)
   } catch (e) {
-    console.log('Repository not found', sanitizeCause(e))
+    console.log('[OBSERVABILITY] Repository not found', sanitizeCause(e))
     await gitlabProjectApi.createEmptyProjectRepository({
       repoName: observabilityRepository,
       description: 'Respository for custom Observability infrastructure resources',
@@ -69,11 +71,13 @@ export const ensureProjectRepository: StepCall<Project> = async (payload) => {
     })
   }
   // Reference to avoid deletion
+  console.log(`[OBSERVABILITY] addSpecialRepositories ${observabilityRepository}`)
   gitlabProjectApi.addSpecialRepositories(observabilityRepository)
   return okStatus
 }
 
 export const upsertProject: StepCall<Project> = async (payload) => {
+  console.log('[OBSERVABILITY] upsertProject')
   try {
     if (specificallyDisabled(payload.config.observability?.enabled)) {
       return okSkipped
