@@ -71,6 +71,7 @@ export class ObservabilityRepoManager {
   private gitlabProjectApi: GitlabProjectApi
 
   constructor(gitlabProjectApi: GitlabProjectApi) {
+    console.log(`[OBSERVABILITY] Creating ObservabilityRepoManager`)
     const gitlabUrl = removeTrailingSlash(requiredEnv('GITLAB_INTERNAL_URL'))
     const gitlabToken = requiredEnv('GITLAB_TOKEN')
     this.gitlabApi = new Gitlab({ token: gitlabToken, host: gitlabUrl })
@@ -78,6 +79,7 @@ export class ObservabilityRepoManager {
   }
 
   private async findOrCreateRepo(): Promise<ProjectSchema> {
+    console.log('[OBSERVABILITY] findOrCreateRepo')
     // Find or create parent Gitlab group
     const groups = await this.gitlabApi.Groups.search(groupName)
     let group = groups.find(g => g.full_path === groupName || g.name === groupName)
@@ -85,9 +87,11 @@ export class ObservabilityRepoManager {
       group = await this.gitlabApi.Groups.create(groupName, groupName)
     }
     // Find or create parent Gitlab repository
+    console.log('[OBSERVABILITY] Find or create parent Gitlab repository')
     const projects: ProjectSchema[] = await this.gitlabApi.Groups.allProjects(group.id)
     const repo = projects.find(p => p.name === repoName)
     if (!repo) {
+      console.log(`[OBSERVABILITY] Create GitLab project ${repoName}`)
       return this.gitlabApi.Projects.create({
         name: repoName,
         path: repoName,
@@ -100,6 +104,7 @@ export class ObservabilityRepoManager {
 
   // Fonction pour récupérer le fichier values.yaml
   private async getValuesFile(project: ProjectSchema): Promise<ObservabilityData | null> {
+    console.log(`[OBSERVABILITY] Retrieve values.yaml`)
     try {
       // Essayer de récupérer le fichier
       const file = await this.gitlabApi.RepositoryFiles.show(project.id, valuesPath, valuesBranch)
@@ -113,6 +118,7 @@ export class ObservabilityRepoManager {
   }
 
   private writeYamlFile(data: object): string {
+    console.log(`[OBSERVABILITY] writeYamlFile`)
     try {
       return yaml.dump(data, {
         styles: {
@@ -132,6 +138,7 @@ export class ObservabilityRepoManager {
 
   // Fonction pour éditer, committer et pousser un fichier YAML
   public async commitAndPushYamlFile(project: ProjectSchema, filePath: string, branch: string, commitMessage: string, yamlString: string): Promise<void> {
+    console.log(`[OBSERVABILITY] commitAndPushYamlFile`)
     const encodedContent = Buffer.from(yamlString).toString('utf-8')
     try {
       // Vérifier si le fichier existe déjà
@@ -152,6 +159,7 @@ export class ObservabilityRepoManager {
   }
 
   public async updateProjectConfig(project: Project, projectValue: ObservabilityProject): Promise<string> {
+    console.log(`[OBSERVABILITY] updateProjectConfig`)
     // Repository created during 'pre' step if needed
     const projectId = await this.gitlabProjectApi.getProjectId(observabilityRepository)
     const observabilityProjectRepository = await this.gitlabProjectApi.getProjectById(projectId)
@@ -203,6 +211,7 @@ export class ObservabilityRepoManager {
   }
 
   public async deleteProjectConfig(project: Project) {
+    console.log(`[OBSERVABILITY] deleteProjectConfig`)
     // Même logique de groupe et de repo que pour l'upsert
     const gitlabRepo = await this.findOrCreateRepo()
 
