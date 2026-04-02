@@ -31,9 +31,9 @@
   },
   "dependencies": {
     "@cpn-console/hooks": "^4.1.0",
-    "@gitbeaker/core": "~40.6.0",
-    "@gitbeaker/requester-utils": "~40.6.0",
-    "@gitbeaker/rest": "~40.6.0",
+    "@gitbeaker/core": "^43.8.0",
+    "@gitbeaker/requester-utils": "^43.8.0",
+    "@gitbeaker/rest": "^43.8.0",
     "@keycloak/keycloak-admin-client": "^26.2.5",
     "js-yaml": "4.1.0",
     "uuid": "^11.1.0",
